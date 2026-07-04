@@ -26,6 +26,9 @@ interface StudySession {
   startPage: number;
   endPage: number;
   createdAt: number;
+  review2Date?: string; // Calculated D+4 review date
+  review3Date?: string; // Calculated D+7 review date
+  review4Date?: string; // Calculated D+15 review date
   completedReviews: {
     review2: boolean; // 4일 후 복습 완료 여부
     review3: boolean; // 7일 후 복습 완료 여부
@@ -141,6 +144,12 @@ export default function App() {
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [supabaseError, setSupabaseError] = useState<string | null>(null);
+
+  // Date Picker ref & custom overlays
+  const dateInputRef = React.useRef<HTMLInputElement>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   // === INITIALIZATION FROM LOCAL STORAGE OR SUPABASE ===
   useEffect(() => {
@@ -161,6 +170,7 @@ export default function App() {
   const fetchFromSupabase = async () => {
     if (!supabaseClient) return;
     setIsSyncing(true);
+    setSupabaseError(null);
     try {
       const { data, error } = await supabaseClient
         .from('spaced_study_sessions')
@@ -168,7 +178,12 @@ export default function App() {
         .order('created_at', { ascending: false });
       
       if (error) {
-        console.error("Error fetching from Supabase:", error);
+        console.warn("Supabase load warning (using LocalStorage fallback):", error.message || error);
+        if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+          setSupabaseError('missing_table');
+        } else {
+          setSupabaseError('general');
+        }
       } else if (data) {
         const formatted: StudySession[] = data.map((item: any) => ({
           id: item.id,
@@ -177,6 +192,9 @@ export default function App() {
           startPage: item.start_page,
           endPage: item.end_page,
           createdAt: item.created_at,
+          review2Date: item.review2_date || calculateFutureDateExcludingSundays(item.date, 4),
+          review3Date: item.review3_date || calculateFutureDateExcludingSundays(item.date, 7),
+          review4Date: item.review4_date || calculateFutureDateExcludingSundays(item.date, 15),
           completedReviews: {
             review2: item.completed_review2,
             review3: item.completed_review3,
@@ -186,8 +204,9 @@ export default function App() {
         setSessions(formatted);
         localStorage.setItem('spaced_study_sessions', JSON.stringify(formatted));
       }
-    } catch (err) {
-      console.error("Failed to sync from Supabase:", err);
+    } catch (err: any) {
+      console.warn("Supabase catch load warning:", err?.message || err);
+      setSupabaseError('general');
     } finally {
       setIsSyncing(false);
     }
@@ -203,10 +222,13 @@ export default function App() {
       try {
         // If it's a delete, remove from Supabase
         if (deletedId) {
-          await supabaseClient
+          const { error: delError } = await supabaseClient
             .from('spaced_study_sessions')
             .delete()
             .eq('id', deletedId);
+          if (delError) {
+            console.warn("Supabase delete warning:", delError.message);
+          }
         }
 
         // Upsert all current sessions to Supabase
@@ -219,19 +241,32 @@ export default function App() {
           created_at: s.createdAt,
           completed_review2: s.completedReviews.review2,
           completed_review3: s.completedReviews.review3,
-          completed_review4: s.completedReviews.review4
+          completed_review4: s.completedReviews.review4,
+          review2_date: s.review2Date || calculateFutureDateExcludingSundays(s.date, 4),
+          review3_date: s.review3Date || calculateFutureDateExcludingSundays(s.date, 7),
+          review4_date: s.review4Date || calculateFutureDateExcludingSundays(s.date, 15)
         }));
 
         if (mapped.length > 0) {
           const { error } = await supabaseClient
-            .from('spaced_study_sessions')
-            .upsert(mapped);
+              .from('spaced_study_sessions')
+              .upsert(mapped);
           if (error) {
-            console.error("Supabase upsert error:", error);
+            console.warn("Supabase upsert warning:", error.message || error);
+            if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
+              setSupabaseError('missing_table');
+            } else {
+              setSupabaseError('general');
+            }
+          } else {
+            setSupabaseError(null);
           }
+        } else {
+          setSupabaseError(null);
         }
-      } catch (err) {
-        console.error("Supabase sync failed:", err);
+      } catch (err: any) {
+        console.warn("Supabase sync catch warning:", err?.message || err);
+        setSupabaseError('general');
       } finally {
         setIsSyncing(false);
       }
@@ -239,17 +274,23 @@ export default function App() {
   };
 
   // === LOGIC: REVIEWS MATCHING SELECTED DATE (일요일 제외) ===
-  // 2차 학습 대상: selectedDate 기준으로 4일 전 최초 학습한 기록 (일요일 제외)
-  const targetDate2 = calculatePastDateExcludingSundays(selectedDate, 4);
-  const reviews2 = sessions.filter(s => s.date === targetDate2);
+  // 2차 학습 대상: s.review2Date가 selectedDate와 일치하는 것 (없다면 하위 호환 계산)
+  const reviews2 = sessions.filter(s => {
+    const r2 = s.review2Date || calculateFutureDateExcludingSundays(s.date, 4);
+    return r2 === selectedDate;
+  });
 
-  // 3차 학습 대상: selectedDate 기준으로 7일 전 최초 학습한 기록 (일요일 제외)
-  const targetDate3 = calculatePastDateExcludingSundays(selectedDate, 7);
-  const reviews3 = sessions.filter(s => s.date === targetDate3);
+  // 3차 학습 대상: s.review3Date가 selectedDate와 일치하는 것 (없다면 하위 호환 계산)
+  const reviews3 = sessions.filter(s => {
+    const r3 = s.review3Date || calculateFutureDateExcludingSundays(s.date, 7);
+    return r3 === selectedDate;
+  });
 
-  // 4차 학습 대상: selectedDate 기준으로 15일 전 최초 학습한 기록 (일요일 제외)
-  const targetDate4 = calculatePastDateExcludingSundays(selectedDate, 15);
-  const reviews4 = sessions.filter(s => s.date === targetDate4);
+  // 4차 학습 대상: s.review4Date가 selectedDate와 일치하는 것 (없다면 하위 호환 계산)
+  const reviews4 = sessions.filter(s => {
+    const r4 = s.review4Date || calculateFutureDateExcludingSundays(s.date, 15);
+    return r4 === selectedDate;
+  });
 
   const hasAnyReviews = reviews2.length > 0 || reviews3.length > 0 || reviews4.length > 0;
 
@@ -307,19 +348,25 @@ export default function App() {
   // === HANDLERS ===
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
 
     const startNum = parseInt(startPage);
     const endNum = parseInt(endPage);
 
     if (isNaN(startNum) || isNaN(endNum) || startNum <= 0 || endNum <= 0) {
-      alert("올바른 페이지 번호를 입력해주세요!");
+      setFormError("올바른 페이지 번호를 입력해주세요!");
       return;
     }
 
     if (startNum > endNum) {
-      alert("시작 페이지는 끝 페이지보다 작거나 같아야 합니다.");
+      setFormError("시작 페이지는 끝 페이지보다 작거나 같아야 합니다.");
       return;
     }
+
+    // Calculate dates
+    const r2 = calculateFutureDateExcludingSundays(selectedDate, 4);
+    const r3 = calculateFutureDateExcludingSundays(selectedDate, 7);
+    const r4 = calculateFutureDateExcludingSundays(selectedDate, 15);
 
     // Create session
     const newSession: StudySession = {
@@ -329,6 +376,9 @@ export default function App() {
       startPage: startNum,
       endPage: endNum,
       createdAt: Date.now(),
+      review2Date: r2,
+      review3Date: r3,
+      review4Date: r4,
       completedReviews: {
         review2: false,
         review3: false,
@@ -351,9 +401,14 @@ export default function App() {
   };
 
   const handleDeleteSession = (id: string) => {
-    if (confirm("이 학습 기록을 정말 삭제하시겠습니까? 관련 복습 일정도 모두 사라집니다.")) {
-      const updated = sessions.filter(s => s.id !== id);
-      saveSessionsAndSync(updated, id);
+    setDeleteTargetId(id);
+  };
+
+  const confirmDeleteSession = () => {
+    if (deleteTargetId) {
+      const updated = sessions.filter(s => s.id !== deleteTargetId);
+      saveSessionsAndSync(updated, deleteTargetId);
+      setDeleteTargetId(null);
     }
   };
 
@@ -424,89 +479,133 @@ export default function App() {
       <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-green-100/60 via-transparent to-transparent opacity-70 pointer-events-none"></div>
       
       {/* HEADER SECTION */}
-      <header className="relative z-10 px-6 sm:px-10 pt-10 pb-6 flex justify-between items-end max-w-5xl mx-auto">
+      <header className="relative z-10 px-6 sm:px-10 lg:px-16 pt-10 pb-6 flex justify-between items-end max-w-7xl mx-auto">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <div className="w-2.5 h-2.5 bg-green-500 rounded-full animate-ping"></div>
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Study Automation System</span>
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight">
             복습 자동화 <span className="text-green-600">개굴개굴 🐸</span>
           </h1>
         </div>
 
         {/* Sync status and cloud connectivity details */}
         {supabaseClient && (
-          <div className="flex items-center gap-2 bg-green-50 border border-green-200/80 px-3 py-1.5 rounded-xl shadow-sm text-[11px] font-bold text-green-700 animate-fade-in">
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            <span>실시간 클라우드 동기화 중</span>
+          <div className="flex flex-col items-end gap-1 animate-fade-in z-10">
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl shadow-sm text-[11.5px] font-extrabold transition-all duration-300 ${
+              supabaseError 
+                ? 'bg-amber-50 border border-amber-200/80 text-amber-700' 
+                : 'bg-green-50 border border-green-200/80 text-green-700'
+            }`}>
+              <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+              <span>{supabaseError ? '로컬 저장소 자동 백업 모드' : '실시간 클라우드 동기화 중'}</span>
+            </div>
+            {supabaseError && (
+              <span className="text-[10px] text-amber-600 font-bold max-w-[280px] text-right leading-tight">
+                {supabaseError === 'missing_table' 
+                  ? '"spaced_study_sessions" 테이블이 없습니다. 모든 기록은 브라우저에 안전히 저장됩니다.' 
+                  : '클라우드 연동에 일시적인 지연이 있어 로컬 저장소로 작동합니다.'}
+              </span>
+            )}
           </div>
         )}
       </header>
 
       {/* MAIN CONTAINER (2-Column Grid beautifully balanced for tablet & desktop) */}
-      <main className="relative z-10 max-w-5xl mx-auto px-6 sm:px-10 grid grid-cols-1 md:grid-cols-2 gap-8">
+      <main className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
         
         {/* LEFT COLUMN: Study entry & Calendar progress */}
-        <section className="flex flex-col space-y-6">
+        <section className="flex flex-col space-y-6 lg:col-span-6">
           
           {/* STUDY INPUT CARD (Phase 01: Initial Learning) */}
-          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex flex-col relative overflow-hidden" id="study-input-form-wrapper">
+          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8 flex flex-col relative overflow-hidden" id="study-input-form-wrapper">
             <div className="mb-5">
               <span className="inline-block px-3 py-1 bg-green-50 text-green-600 text-[10px] font-bold rounded-full mb-2 uppercase tracking-widest">
                 Phase 01: Initial Learning
               </span>
-              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-800 tracking-tight">오늘 공부할 최초 진도 등록</h2>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight">오늘 공부할 최초 진도 등록</h2>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5">
+            <form onSubmit={handleSubmit} className="space-y-6">
               {/* Native styled date picker with large touch target */}
               <div className="flex flex-col space-y-1.5">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">
                   최초 학습일 날짜 선택
                 </label>
-                <div className="relative flex items-center bg-slate-50/50 hover:bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 transition-all duration-300">
+                <div 
+                  onClick={() => {
+                    try {
+                      if (dateInputRef.current) {
+                        if (typeof dateInputRef.current.showPicker === 'function') {
+                          dateInputRef.current.showPicker();
+                        } else {
+                          dateInputRef.current.click();
+                        }
+                      }
+                    } catch (e) {
+                      dateInputRef.current?.click();
+                    }
+                  }}
+                  className="relative flex items-center bg-slate-50/50 hover:bg-slate-50 border-2 border-slate-100 rounded-2xl p-4.5 lg:p-5 transition-all duration-300 cursor-pointer select-none"
+                >
                   <span className="text-xl mr-3">📅</span>
+                  <span className="text-sm sm:text-base font-extrabold text-slate-800">
+                    {selectedDate ? `${selectedDate.split('-')[0]}년 ${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일` : '날짜 선택'}
+                  </span>
+                  
+                  {/* Hidden native input picker triggered by container click */}
                   <input 
+                    ref={dateInputRef}
                     type="date" 
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="w-full bg-transparent text-sm font-bold text-slate-800 outline-none cursor-pointer focus:text-green-600 border-none p-0 focus:ring-0 active:ring-0"
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   />
-                  {selectedDate === getTodayDateString() && (
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[9px] font-bold bg-green-500 text-white px-2 py-0.5 rounded-full uppercase tracking-wider">
-                      오늘
-                    </span>
-                  )}
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedDate(getTodayDateString());
+                    }}
+                    className={`absolute right-4 top-1/2 -translate-y-1/2 text-xs font-extrabold px-4 py-2 rounded-xl transition-all cursor-pointer z-10 active:scale-95 shadow-sm ${
+                      selectedDate === getTodayDateString()
+                        ? 'bg-green-500 text-white'
+                        : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
+                    }`}
+                  >
+                    오늘
+                  </button>
                 </div>
               </div>
 
               {/* Subject Tag Choices (수1, 수2, 확통 3가지) */}
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">
                   공부할 과목 선택
                 </label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2.5">
                   {['수1', '수2', '확통'].map((sub) => (
                     <button
                       key={sub}
                       type="button"
                       onClick={() => setSubject(sub)}
-                      className={`py-3 rounded-2xl font-bold text-sm border-2 transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                      className={`py-3 sm:py-3.5 rounded-2xl font-bold text-sm border-2 transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 active:scale-[0.97] ${
                         subject === sub
                           ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-100'
                           : 'bg-slate-50 border-slate-100 text-slate-600 hover:bg-slate-100 hover:border-slate-200'
                       }`}
                     >
-                      <span className="text-xs">📚</span>
-                      <span>{sub}</span>
+                      <span className="text-sm">📚</span>
+                      <span className="text-sm sm:text-base">{sub}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               {/* Range inputs with large stylish presentation */}
-              <div className="bg-slate-50/80 border-2 border-slate-100 rounded-2xl p-4">
+              <div className="bg-slate-50/80 border-2 border-slate-100 rounded-2xl p-4 lg:p-5">
                 <label className="text-xs font-bold text-slate-400 uppercase block mb-2.5">
                   공부한 페이지 범위
                 </label>
@@ -515,26 +614,30 @@ export default function App() {
                     <input 
                       type="number" 
                       min="1"
-                      placeholder="시작 쪽"
+                      placeholder=""
                       value={startPage}
-                      onChange={(e) => setStartPage(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg font-bold text-center text-slate-800 outline-none focus:border-green-300 focus:ring-2 focus:ring-green-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(e) => {
+                        setStartPage(e.target.value);
+                        setFormError(null);
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 lg:py-3.5 text-lg lg:text-xl font-extrabold text-center text-slate-800 outline-none focus:border-green-300 focus:ring-2 focus:ring-green-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 uppercase">Start</span>
                   </div>
                   <span className="text-slate-400 font-bold text-base">~</span>
                   <div className="flex-1 relative group">
                     <input 
                       type="number" 
                       min="1"
-                      placeholder="끝 쪽"
+                      placeholder=""
                       value={endPage}
-                      onChange={(e) => setEndPage(e.target.value)}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3.5 py-2.5 text-lg font-bold text-center text-green-600 outline-none focus:border-green-300 focus:ring-2 focus:ring-green-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      onChange={(e) => {
+                        setEndPage(e.target.value);
+                        setFormError(null);
+                      }}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-4 py-3 lg:py-3.5 text-lg lg:text-xl font-extrabold text-center text-green-600 outline-none focus:border-green-300 focus:ring-2 focus:ring-green-100 transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       required
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[9px] font-bold text-green-400 uppercase font-display">End</span>
                   </div>
                 </div>
 
@@ -546,40 +649,18 @@ export default function App() {
                 )}
               </div>
 
-              {/* Real-time Dynamic Schedule Previewer (일요일 제외 반영) */}
-              <div className="bg-gradient-to-br from-green-50/40 via-green-50/20 to-transparent rounded-2xl p-4 border border-green-100/50">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <Clock className="w-4 h-4 text-green-600" />
-                  <h4 className="text-xs font-bold text-green-900 uppercase tracking-wide">
-                    {formatDateWithDay(selectedDate)} 기준 자동 계산 주기 (일요일 제외)
-                  </h4>
+              {/* Form validation error without browser block */}
+              {formError && (
+                <div className="text-rose-500 font-bold text-xs bg-rose-50 border border-rose-100 px-4 py-3 rounded-xl flex items-center gap-1.5 animate-pulse">
+                  <span>⚠️</span>
+                  <span>{formError}</span>
                 </div>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="bg-white/80 backdrop-blur-sm p-2.5 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <span className="text-[9px] font-extrabold text-green-600 uppercase tracking-tighter block">2차 (4일 후)</span>
-                    <span className="text-xs font-bold text-slate-700 block mt-0.5">
-                      {calculateFutureDateExcludingSundays(selectedDate, 4).substring(5).replace('-', '월 ') + '일'}
-                    </span>
-                  </div>
-                  <div className="bg-white/80 backdrop-blur-sm p-2.5 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <span className="text-[9px] font-extrabold text-amber-600 uppercase tracking-tighter block">3차 (7일 후)</span>
-                    <span className="text-xs font-bold text-slate-700 block mt-0.5">
-                      {calculateFutureDateExcludingSundays(selectedDate, 7).substring(5).replace('-', '월 ') + '일'}
-                    </span>
-                  </div>
-                  <div className="bg-white/80 backdrop-blur-sm p-2.5 rounded-xl border border-slate-100 shadow-sm text-center">
-                    <span className="text-[9px] font-extrabold text-rose-600 uppercase tracking-tighter block">4차 (15일 후)</span>
-                    <span className="text-xs font-bold text-slate-700 block mt-0.5">
-                      {calculateFutureDateExcludingSundays(selectedDate, 15).substring(5).replace('-', '월 ') + '일'}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              )}
 
               {/* Shrunken complete button */}
               <button
                 type="submit"
-                className="w-full bg-green-500 hover:bg-green-600 text-white h-13 rounded-2xl text-base font-bold shadow-lg shadow-green-100 flex items-center justify-center gap-2 active:scale-[0.98] transition-all cursor-pointer"
+                className="w-full bg-green-500 hover:bg-green-600 text-white h-14 lg:h-15 rounded-2xl text-base lg:text-lg font-black shadow-lg shadow-green-100/60 flex items-center justify-center gap-2 active:scale-[0.97] transition-all cursor-pointer"
                 id="submit-study-complete-btn"
               >
                 <span>오늘의 학습진도 등록하기</span>
@@ -588,51 +669,51 @@ export default function App() {
           </div>
 
           {/* CALENDAR PROGRESS STAMP MAP */}
-          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
+          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5">
               <div className="flex items-center gap-2">
-                <span className="p-2 bg-green-50 text-green-600 rounded-xl">
+                <span className="p-2.5 bg-green-50 text-green-600 rounded-xl">
                   <CalendarDays className="w-5 h-5" />
                 </span>
                 <div>
-                  <h3 className="font-display font-bold text-base text-slate-800 tracking-tight">학습 기록 현황 달력</h3>
-                  <p className="text-slate-400 text-[11px] mt-0.5">날짜를 선택해 복습 임무를 탐색하세요.</p>
+                  <h3 className="font-display font-bold text-base sm:text-lg text-slate-800 tracking-tight">학습 기록 현황 달력</h3>
+                  <p className="text-slate-400 text-[11px] sm:text-xs mt-0.5">날짜를 선택해 복습 임무를 탐색하세요.</p>
                 </div>
               </div>
 
               {/* Calendar controls */}
-              <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-xl">
+              <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-100 p-1 rounded-xl">
                 <button 
                   onClick={handlePrevMonth}
-                  className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition text-slate-600 cursor-pointer"
+                  className="p-2.5 hover:bg-white hover:shadow-sm rounded-lg transition text-slate-600 cursor-pointer active:scale-90"
                 >
-                  <ChevronLeft className="w-3.5 h-3.5" />
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-xs font-extrabold text-slate-800 min-w-[70px] text-center font-display">
+                <span className="text-xs sm:text-sm font-extrabold text-slate-800 min-w-[80px] text-center font-display">
                   {currentCalendarYear}.{String(currentCalendarMonth + 1).padStart(2, '0')}
                 </span>
                 <button 
                   onClick={handleNextMonth}
-                  className="p-1.5 hover:bg-white hover:shadow-sm rounded-lg transition text-slate-600 cursor-pointer"
+                  className="p-2.5 hover:bg-white hover:shadow-sm rounded-lg transition text-slate-600 cursor-pointer active:scale-90"
                 >
-                  <ChevronRight className="w-3.5 h-3.5" />
+                  <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
             {/* Weekdays */}
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-slate-400 uppercase mb-2">
-              <div className="text-red-400">일</div>
-              <div>월</div>
-              <div>화</div>
-              <div>수</div>
-              <div>목</div>
-              <div>금</div>
-              <div className="text-green-500">토</div>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-bold text-slate-400 uppercase mb-3">
+              <div className="text-red-400 py-1">일</div>
+              <div className="py-1">월</div>
+              <div className="py-1">화</div>
+              <div className="py-1">수</div>
+              <div className="py-1">목</div>
+              <div className="py-1">금</div>
+              <div className="text-green-500 py-1">토</div>
             </div>
 
             {/* Cells */}
-            <div className="grid grid-cols-7 gap-1.5">
+            <div className="grid grid-cols-7 gap-2 lg:gap-2.5">
               {calendarCells.map((cellValue, idx) => {
                 if (cellValue === null) {
                   return <div key={`empty-${idx}`} className="aspect-square bg-slate-50/10 rounded-xl" />;
@@ -643,31 +724,52 @@ export default function App() {
                 const dailySessions = getSessionsForDate(cellValue);
                 const hasSessions = dailySessions.length > 0;
 
+                const hasR2 = sessions.some(s => (s.review2Date || calculateFutureDateExcludingSundays(s.date, 4)) === cellValue);
+                const hasR3 = sessions.some(s => (s.review3Date || calculateFutureDateExcludingSundays(s.date, 7)) === cellValue);
+                const hasR4 = sessions.some(s => (s.review4Date || calculateFutureDateExcludingSundays(s.date, 15)) === cellValue);
+
                 return (
                   <button
                     key={`day-${cellValue}`}
                     type="button"
                     onClick={() => setSelectedDate(cellValue)}
-                    className={`aspect-square rounded-xl flex flex-col items-center justify-between p-1.5 transition-all border relative cursor-pointer ${
+                    className={`aspect-square rounded-2xl flex flex-col items-center justify-between p-2 lg:p-2.5 transition-all border relative cursor-pointer active:scale-95 ${
                       isSelected
                         ? 'bg-green-500 border-green-500 text-white font-bold shadow-md shadow-green-100'
                         : hasSessions
-                        ? 'bg-green-50 border-green-100 text-green-800 font-bold hover:bg-green-100'
+                        ? 'bg-green-50 border-green-100 text-green-800 font-extrabold hover:bg-green-100'
                         : 'bg-white hover:bg-slate-50/60 border-slate-100 text-slate-600'
                     }`}
                   >
-                    <span className="text-xs self-start font-display leading-none">{dayNum}</span>
+                    <span className="text-xs sm:text-sm self-start font-display leading-none">{dayNum}</span>
                     
-                    {/* Stamp Indicator */}
-                    {hasSessions && (
-                      <div className="flex gap-0.5 justify-center w-full mt-auto">
-                        {dailySessions.slice(0, 3).map((s) => (
+                    {/* Stamp Indicator with Review Stage Dots */}
+                    {(hasSessions || hasR2 || hasR3 || hasR4) && (
+                      <div className="flex gap-1 justify-center w-full mt-auto">
+                        {hasSessions && (
                           <span 
-                            key={s.id} 
-                            className={`w-1 h-1 rounded-full ${isSelected ? 'bg-white' : 'bg-green-500 animate-pulse'}`}
-                            title={`${s.subject}: ${s.startPage}~${s.endPage}p`}
+                            className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white' : 'bg-emerald-500 animate-pulse'}`}
+                            title={`최초 학습: ${dailySessions.map(s => s.subject).join(', ')}`}
                           />
-                        ))}
+                        )}
+                        {hasR2 && (
+                          <span 
+                            className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white/90' : 'bg-green-500'}`}
+                            title="2차 복습 (D+4)"
+                          />
+                        )}
+                        {hasR3 && (
+                          <span 
+                            className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white/90' : 'bg-amber-500'}`}
+                            title="3차 복습 (D+7)"
+                          />
+                        )}
+                        {hasR4 && (
+                          <span 
+                            className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-white/90' : 'bg-rose-500'}`}
+                            title="4차 복습 (D+15)"
+                          />
+                        )}
                       </div>
                     )}
                   </button>
@@ -676,14 +778,30 @@ export default function App() {
             </div>
 
             {/* Legend info */}
-            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-400">
-              <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-5 pt-4 border-t border-slate-100 text-[10px] sm:text-xs text-slate-400">
+              <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-green-500" />
                 <span>선택일</span>
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-green-100 border border-green-200" />
                 <span>진도 등록됨</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                <span>최초</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                <span>2차</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                <span>3차</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                <span>4차</span>
               </div>
             </div>
           </div>
@@ -691,46 +809,46 @@ export default function App() {
         </section>
 
         {/* RIGHT COLUMN: Today's review missions & Mascot summary card */}
-        <section className="flex flex-col space-y-6">
+        <section className="flex flex-col space-y-6 lg:col-span-6">
           
           {/* TODAY'S REVIEWS MISSON LIST */}
-          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 flex flex-col">
+          <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8 flex flex-col">
             
             {/* Mission Section Header */}
             <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
               <div>
-                <h3 className="text-xs font-extrabold text-slate-400 uppercase tracking-widest">오늘의 복습 미션</h3>
-                <p className="text-xs text-slate-400 mt-0.5">{formatDateWithDay(selectedDate)}</p>
+                <h3 className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest">오늘의 복습 미션</h3>
+                <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">{formatDateWithDay(selectedDate)}</p>
               </div>
-              <span className="text-[10px] font-extrabold text-green-600 bg-green-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+              <span className="text-[11px] sm:text-xs font-black text-green-700 bg-green-50/80 px-3 py-1.5 rounded-full uppercase tracking-wider border border-green-100/60">
                 {remainingReviewsCount}개 남음
               </span>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               
               {/* === 1. 최초 학습 범위 (선택된 날짜 기준) === */}
-              <div className="bg-slate-50/50 rounded-2xl p-3.5 border border-slate-100">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <span className="inline-block w-1.5 h-1.5 bg-green-500 rounded-full"></span>
-                  <span className="text-[9px] font-extrabold text-green-600 uppercase tracking-wider">당일 최초 신규 진도</span>
+              <div className="bg-slate-50/50 rounded-2xl p-4.5 border border-slate-100">
+                <div className="flex items-center gap-1.5 mb-2.5">
+                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  <span className="text-[10px] sm:text-xs font-black text-green-600 uppercase tracking-wider">당일 최초 신규 진도</span>
                 </div>
                 
                 {sessions.filter(s => s.date === selectedDate).length > 0 ? (
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {sessions.filter(s => s.date === selectedDate).map(s => (
-                      <div key={s.id} className="bg-white rounded-xl p-2.5 border border-slate-100 flex items-start justify-between gap-3 shadow-sm">
+                      <div key={s.id} className="bg-white rounded-xl p-3 lg:p-3.5 border border-slate-100 flex items-start justify-between gap-3 shadow-sm">
                         <div>
-                          <p className="text-sm font-extrabold text-slate-800">{s.subject}</p>
-                          <p className="text-xs font-mono font-bold text-slate-500 mt-0.5">
-                            범위: <span className="text-green-600">{s.startPage}p ~ {s.endPage}p</span>
+                          <p className="text-sm sm:text-base font-black text-slate-800">{s.subject}</p>
+                          <p className="text-xs sm:text-sm font-mono font-bold text-slate-500 mt-1">
+                            범위: <span className="text-green-600 font-extrabold">{s.startPage}p ~ {s.endPage}p</span>
                           </p>
                         </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="bg-white/80 p-3 rounded-xl border border-slate-100 text-center text-xs text-slate-400 font-medium">
+                  <div className="bg-white/80 p-4 rounded-xl border border-slate-100 text-center text-xs text-slate-400 font-bold leading-relaxed">
                     📖 아직 등록된 최초 공부가 없습니다.<br />
                     좌측에서 공부 진도를 등록해보세요!
                   </div>
@@ -739,42 +857,42 @@ export default function App() {
 
               {/* === 2. SECOND REVIEW (2차 복습: D+4, 일요일 제외) === */}
               {reviews2.length > 0 ? (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[9px] font-extrabold text-green-600 uppercase tracking-wider">2차 복습 (4일 전 진도)</span>
-                    <span className="text-[8px] font-extrabold bg-green-50 text-green-600 px-1.5 py-0.5 rounded">D-4 Target</span>
+                    <span className="text-[10px] sm:text-xs font-black text-green-600 uppercase tracking-wider">2차 복습 (4일 전 진도)</span>
+                    <span className="text-[9px] font-black bg-green-50 text-green-600 px-2 py-0.5 rounded-lg border border-green-100/40">D-4 Target</span>
                   </div>
 
                   {reviews2.map(s => (
                     <div 
                       key={s.id} 
-                      className="group bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all relative"
+                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mr-3 font-display font-extrabold text-sm">
+                      <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mr-3.5 font-display font-black text-base shrink-0">
                         2
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-xs font-extrabold text-slate-800 truncate block">{s.subject}</span>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
                           <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-[9px] font-medium text-slate-400 shrink-0">{s.date.substring(5)}</span>
+                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
                         </div>
-                        <p className="text-sm font-extrabold text-slate-800 font-mono">{s.startPage} ~ {s.endPage}p</p>
+                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
                       </div>
 
                       {/* Complete toggle checkbox */}
                       <button
                         onClick={() => handleToggleReviewComplete(s.id, 'review2')}
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
                           s.completedReviews.review2
-                            ? 'bg-green-500 border-green-500 text-white shadow-sm'
-                            : 'border-slate-100 text-slate-300 hover:border-green-500 hover:bg-green-50/30'
+                            ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200'
+                            : 'border-slate-200 text-slate-300 hover:border-green-500 hover:bg-green-50/30'
                         }`}
                       >
                         {s.completedReviews.review2 ? (
-                          <Check className="w-4 h-4 stroke-[3px]" />
+                          <Check className="w-5 h-5 stroke-[3px]" />
                         ) : (
-                          <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         )}
                       </button>
                     </div>
@@ -784,41 +902,41 @@ export default function App() {
 
               {/* === 3. THIRD REVIEW (3차 복습: D+7, 일요일 제외) === */}
               {reviews3.length > 0 ? (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[9px] font-extrabold text-amber-600 uppercase tracking-wider">3차 복습 (7일 전 진도)</span>
-                    <span className="text-[8px] font-extrabold bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded">D-7 Target</span>
+                    <span className="text-[10px] sm:text-xs font-black text-amber-600 uppercase tracking-wider">3차 복습 (7일 전 진도)</span>
+                    <span className="text-[9px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-100/40">D-7 Target</span>
                   </div>
 
                   {reviews3.map(s => (
                     <div 
                       key={s.id} 
-                      className="group bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all relative"
+                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 mr-3 font-display font-extrabold text-sm">
+                      <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 mr-3.5 font-display font-black text-base shrink-0">
                         3
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-xs font-extrabold text-slate-800 truncate block">{s.subject}</span>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
                           <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-[9px] font-medium text-slate-400 shrink-0">{s.date.substring(5)}</span>
+                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
                         </div>
-                        <p className="text-sm font-extrabold text-slate-800 font-mono">{s.startPage} ~ {s.endPage}p</p>
+                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
                       </div>
 
                       <button
                         onClick={() => handleToggleReviewComplete(s.id, 'review3')}
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
                           s.completedReviews.review3
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
-                            : 'border-slate-100 text-slate-300 hover:border-amber-500 hover:bg-amber-50/30'
+                            ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200'
+                            : 'border-slate-200 text-slate-300 hover:border-amber-500 hover:bg-amber-50/30'
                         }`}
                       >
                         {s.completedReviews.review3 ? (
-                          <Check className="w-4 h-4 stroke-[3px]" />
+                          <Check className="w-5 h-5 stroke-[3px]" />
                         ) : (
-                          <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         )}
                       </button>
                     </div>
@@ -828,41 +946,41 @@ export default function App() {
 
               {/* === 4. FOURTH REVIEW (4차 복습: D+15, 일요일 제외) === */}
               {reviews4.length > 0 ? (
-                <div className="space-y-1.5">
+                <div className="space-y-2">
                   <div className="flex items-center justify-between px-1">
-                    <span className="text-[9px] font-extrabold text-rose-600 uppercase tracking-wider">4차 복습 (15일 전 진도)</span>
-                    <span className="text-[8px] font-extrabold bg-rose-50 text-rose-600 px-1.5 py-0.5 rounded">D-15 Target</span>
+                    <span className="text-[10px] sm:text-xs font-black text-rose-600 uppercase tracking-wider">4차 복습 (15일 전 진도)</span>
+                    <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-lg border border-rose-100/40">D-15 Target</span>
                   </div>
 
                   {reviews4.map(s => (
                     <div 
                       key={s.id} 
-                      className="group bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center hover:shadow-md transition-all relative"
+                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
                     >
-                      <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 mr-3 font-display font-extrabold text-sm">
+                      <div className="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 mr-3.5 font-display font-black text-base shrink-0">
                         4
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-xs font-extrabold text-slate-800 truncate block">{s.subject}</span>
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
                           <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-[9px] font-medium text-slate-400 shrink-0">{s.date.substring(5)}</span>
+                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
                         </div>
-                        <p className="text-sm font-extrabold text-slate-800 font-mono">{s.startPage} ~ {s.endPage}p</p>
+                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
                       </div>
 
                       <button
                         onClick={() => handleToggleReviewComplete(s.id, 'review4')}
-                        className={`w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 ${
+                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
                           s.completedReviews.review4
-                            ? 'bg-rose-500 border-rose-500 text-white shadow-sm'
-                            : 'border-slate-100 text-slate-300 hover:border-rose-500 hover:bg-rose-50/30'
+                            ? 'bg-rose-500 border-rose-500 text-white shadow-md shadow-rose-200'
+                            : 'border-slate-200 text-slate-300 hover:border-rose-500 hover:bg-rose-50/30'
                         }`}
                       >
                         {s.completedReviews.review4 ? (
-                          <Check className="w-4 h-4 stroke-[3px]" />
+                          <Check className="w-5 h-5 stroke-[3px]" />
                         ) : (
-                          <Check className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
                         )}
                       </button>
                     </div>
@@ -885,23 +1003,23 @@ export default function App() {
           </div>
 
           {/* BEAUTIFUL FROG MASCOT STATS & MOOD BOARD (Cleverly fills the column to balance heights perfectly) */}
-          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-3xl p-6 text-white shadow-xl shadow-green-200/50 relative overflow-hidden flex flex-col justify-between min-h-[310px]">
+          <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-3xl p-6 lg:p-8 text-white shadow-xl shadow-green-200/50 relative overflow-hidden flex flex-col justify-between min-h-[340px]">
             {/* Background elements */}
             <div className="absolute -right-12 -bottom-12 w-44 h-44 bg-green-400/20 rounded-full blur-xl pointer-events-none" />
             <div className="absolute right-4 top-4 text-8xl opacity-15 select-none pointer-events-none">🐸</div>
 
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <span className="p-1.5 bg-white/20 rounded-lg backdrop-blur-md">
+              <div className="flex items-center gap-2 mb-4.5">
+                <span className="p-2 bg-white/20 rounded-lg backdrop-blur-md">
                   <Sparkles className="w-4 h-4 text-yellow-300" />
                 </span>
-                <span className="text-[10px] font-extrabold uppercase tracking-widest text-green-100">Study Stats & Mascot</span>
+                <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-green-100">Study Stats & Mascot</span>
               </div>
 
               {/* Frog cheer dialog block */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 border border-white/10 relative mb-6">
+              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 lg:p-5 border border-white/10 relative mb-6">
                 <div className="absolute left-6 -top-2 w-3 h-3 bg-white/10 rotate-45 border-l border-t border-white/10" />
-                <p className="text-xs font-bold leading-relaxed">
+                <p className="text-xs sm:text-sm font-bold leading-relaxed">
                   {remainingReviewsCount === 0 && sessions.length > 0
                     ? "“오늘 계획된 모든 복습 미션 올클리어! 정말 대단해요 개굴! 내일의 성장도 벌써 기대되는걸요?🐸💚”"
                     : sessions.length === 0
@@ -909,28 +1027,28 @@ export default function App() {
                     : "“복습은 장기 기억의 지름길 개굴! 오늘 남아있는 복습 미션을 차근차근 해결하며 뇌에 근육을 키워봐요!🐸💪”"
                   }
                 </p>
-                <span className="text-[10px] font-extrabold text-green-200 block mt-2 text-right">
+                <span className="text-[10px] sm:text-xs font-black text-green-200 block mt-2.5 text-right">
                   — 청개구리 멘토 개구리
                 </span>
               </div>
             </div>
 
             {/* Quick dashboard stats */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 rounded-2xl text-center">
-                <Flame className="w-4 h-4 text-orange-400 mx-auto mb-1" />
-                <span className="text-[9px] font-bold text-green-200 block">학습 연속</span>
-                <span className="text-sm font-extrabold block">{streak}일째</span>
+            <div className="grid grid-cols-3 gap-3.5">
+              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
+                <Flame className="w-4 h-4 text-orange-400 mx-auto mb-1.5" />
+                <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">학습 연속</span>
+                <span className="text-sm sm:text-base font-extrabold block">{streak}일째</span>
               </div>
-              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 rounded-2xl text-center">
-                <BookOpen className="w-4 h-4 text-blue-300 mx-auto mb-1" />
-                <span className="text-[9px] font-bold text-green-200 block">정복한 쪽수</span>
-                <span className="text-sm font-extrabold block">{totalPagesStudied}p</span>
+              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
+                <BookOpen className="w-4 h-4 text-blue-300 mx-auto mb-1.5" />
+                <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">정복한 쪽수</span>
+                <span className="text-sm sm:text-base font-extrabold block">{totalPagesStudied}p</span>
               </div>
-              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 rounded-2xl text-center">
-                <TrendingUp className="w-4 h-4 text-yellow-300 mx-auto mb-1" />
-                <span className="text-[9px] font-bold text-green-200 block">복습 완료율</span>
-                <span className="text-sm font-extrabold block">{reviewCompletionRate}%</span>
+              <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
+                <TrendingUp className="w-4 h-4 text-yellow-300 mx-auto mb-1.5" />
+                <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">복습 완료율</span>
+                <span className="text-sm sm:text-base font-extrabold block">{reviewCompletionRate}%</span>
               </div>
             </div>
 
@@ -941,15 +1059,15 @@ export default function App() {
       </main>
 
       {/* BOTTOM SECTION: ALL STUDY LISTS TABLE (Grand consolidated history timeline) */}
-      <section className="max-w-5xl mx-auto px-6 sm:px-10 mt-8">
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6">
+      <section className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 mt-8">
+        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-5 pb-3 border-b border-slate-100">
             <div>
-              <h3 className="font-display text-base font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-green-600" />
+              <h3 className="font-display text-base sm:text-lg font-extrabold text-slate-800 tracking-tight flex items-center gap-1.5">
+                <Plus className="w-5 h-5 text-green-600" />
                 전체 공부 및 에이징 타임라인
               </h3>
-              <p className="text-xs text-slate-400 mt-0.5">등록된 최초 학습 데이터의 일요일 제외 복습 수행 현황을 전체적으로 통합 관리합니다.</p>
+              <p className="text-xs text-slate-400 mt-0.5">등록된 최초 학습 데이터의 일요일 제외 복습 수행 현황을 전체적으로 통합 관리합니다. (오래된 순부터 정렬)</p>
             </div>
             <span className="text-xs font-bold bg-slate-50 text-slate-500 border border-slate-100 rounded-xl px-3 py-1.5">
               세션 합계: <span className="text-green-600 font-extrabold">{sessions.length}</span> 개
@@ -957,101 +1075,106 @@ export default function App() {
           </div>
 
           {sessions.length > 0 ? (
-            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+            <div className="overflow-x-auto overflow-y-auto max-h-[440px] xl:max-h-[500px] rounded-2xl border border-slate-100 relative scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
               <table className="w-full text-left border-collapse min-w-[700px]">
-                <thead>
-                  <tr className="bg-slate-50/80 text-[9px] font-extrabold text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                    <th className="py-3 px-4">최초 학습일</th>
-                    <th className="py-3 px-4">과목</th>
-                    <th className="py-3 px-4">공부 범위</th>
-                    <th className="py-3 px-4 text-center">2차 (D+4)</th>
-                    <th className="py-3 px-4 text-center">3차 (D+7)</th>
-                    <th className="py-3 px-4 text-center">4차 (D+15)</th>
-                    <th className="py-3 px-4 text-right">삭제</th>
+                <thead className="bg-slate-50 text-[11px] sm:text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 sticky top-0 z-20">
+                  <tr>
+                    <th className="py-4 px-4.5">최초 학습일</th>
+                    <th className="py-4 px-4.5">과목</th>
+                    <th className="py-4 px-4.5">공부 범위</th>
+                    <th className="py-4 px-4.5 text-center">2차 (D+4)</th>
+                    <th className="py-4 px-4.5 text-center">3차 (D+7)</th>
+                    <th className="py-4 px-4.5 text-center">4차 (D+15)</th>
+                    <th className="py-4 px-4.5 text-right pr-6">삭제</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                  {sessions.map((s) => (
+                <tbody className="divide-y divide-slate-100 text-xs sm:text-sm text-slate-700">
+                  {[...sessions].sort((a, b) => {
+                    const dateA = new Date(a.date).getTime();
+                    const dateB = new Date(b.date).getTime();
+                    if (dateA !== dateB) return dateA - dateB;
+                    return a.createdAt - b.createdAt;
+                  }).map((s) => (
                     <tr key={s.id} className="hover:bg-slate-50/40 transition-colors">
-                      <td className="py-3 px-4 font-bold text-slate-900">
-                        {s.date} <span className="text-[9px] text-slate-400 font-normal">({getKoreanDayOfWeek(s.date)})</span>
+                      <td className="py-3.5 sm:py-4 px-4.5 font-bold text-slate-900">
+                        {s.date} <span className="text-[10px] sm:text-xs text-slate-400 font-medium">({getKoreanDayOfWeek(s.date)})</span>
                       </td>
-                      <td className="py-3 px-4 font-extrabold">
-                        <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-lg text-[11px]">
+                      <td className="py-3.5 sm:py-4 px-4.5 font-extrabold">
+                        <span className="px-2.5 py-1.5 bg-slate-100 text-slate-700 rounded-lg text-xs">
                           {s.subject}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-mono font-bold text-green-600">
-                        <span className="bg-green-50/50 border border-green-100/30 px-2.5 py-1 rounded-lg text-xs">
+                      <td className="py-3.5 sm:py-4 px-4.5 font-mono font-bold text-green-600">
+                        <span className="bg-green-50/50 border border-green-100/30 px-3 py-1.5 rounded-lg text-xs sm:text-sm">
                           {s.startPage} ~ {s.endPage}p
                         </span>
                       </td>
                       
                       {/* D+4 Review toggle (일요일 제외 주기) */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex flex-col items-center gap-0.5 justify-center">
-                          <span className="text-[8px] text-slate-400 font-bold">
-                            {calculateFutureDateExcludingSundays(s.date, 4).substring(5).replace('-', '/')}
+                      <td className="py-3.5 sm:py-4 px-4.5 text-center">
+                        <div className="flex flex-col items-center gap-1 justify-center">
+                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-extrabold">
+                            {(s.review2Date || calculateFutureDateExcludingSundays(s.date, 4)).substring(5).replace('-', '/')}
                           </span>
                           <button
                             onClick={() => handleToggleReviewComplete(s.id, 'review2')}
-                            className={`w-5.5 h-5.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-6.5 h-6.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                               s.completedReviews.review2
                                 ? 'bg-green-500 border-green-500 text-white shadow-sm'
                                 : 'bg-white border-slate-200 text-transparent hover:border-green-400'
                             }`}
                           >
-                            <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                            <Check className="w-4 h-4 stroke-[3px]" />
                           </button>
                         </div>
                       </td>
 
                       {/* D+7 Review toggle (일요일 제외 주기) */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex flex-col items-center gap-0.5 justify-center">
-                          <span className="text-[8px] text-slate-400 font-bold">
-                            {calculateFutureDateExcludingSundays(s.date, 7).substring(5).replace('-', '/')}
+                      <td className="py-3.5 sm:py-4 px-4.5 text-center">
+                        <div className="flex flex-col items-center gap-1 justify-center">
+                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-extrabold">
+                            {(s.review3Date || calculateFutureDateExcludingSundays(s.date, 7)).substring(5).replace('-', '/')}
                           </span>
                           <button
                             onClick={() => handleToggleReviewComplete(s.id, 'review3')}
-                            className={`w-5.5 h-5.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-6.5 h-6.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                               s.completedReviews.review3
                                 ? 'bg-amber-500 border-amber-500 text-white shadow-sm'
                                 : 'bg-white border-slate-200 text-transparent hover:border-amber-400'
                             }`}
                           >
-                            <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                            <Check className="w-4 h-4 stroke-[3px]" />
                           </button>
                         </div>
                       </td>
 
                       {/* D+15 Review toggle (일요일 제외 주기) */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex flex-col items-center gap-0.5 justify-center">
-                          <span className="text-[8px] text-slate-400 font-bold">
-                            {calculateFutureDateExcludingSundays(s.date, 15).substring(5).replace('-', '/')}
+                      <td className="py-3.5 sm:py-4 px-4.5 text-center">
+                        <div className="flex flex-col items-center gap-1 justify-center">
+                          <span className="text-[9px] sm:text-[10px] text-slate-400 font-extrabold">
+                            {(s.review4Date || calculateFutureDateExcludingSundays(s.date, 15)).substring(5).replace('-', '/')}
                           </span>
                           <button
                             onClick={() => handleToggleReviewComplete(s.id, 'review4')}
-                            className={`w-5.5 h-5.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${
+                            className={`w-6.5 h-6.5 rounded-lg border flex items-center justify-center transition-all cursor-pointer active:scale-90 ${
                               s.completedReviews.review4
                                 ? 'bg-rose-500 border-rose-500 text-white shadow-sm'
                                 : 'bg-white border-slate-200 text-transparent hover:border-rose-400'
                             }`}
                           >
-                            <Check className="w-3.5 h-3.5 stroke-[3px]" />
+                            <Check className="w-4 h-4 stroke-[3px]" />
                           </button>
                         </div>
                       </td>
 
                       {/* Delete option */}
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3.5 sm:py-4 px-4.5 text-right pr-6">
                         <button
                           onClick={() => handleDeleteSession(s.id)}
-                          className="p-1 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all cursor-pointer inline-flex items-center"
+                          className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all cursor-pointer inline-flex items-center active:scale-90"
                           title="기록 삭제"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
@@ -1215,6 +1338,59 @@ export default function App() {
                   className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-xl transition cursor-pointer"
                 >
                   확인 완료! 🍀
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* === MODAL: DELETE CONFIRMATION === */}
+        {deleteTargetId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteTargetId(null)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+
+            {/* Modal Card */}
+            <motion.div
+              initial={{ scale: 0.92, opacity: 0, y: 15 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.92, opacity: 0, y: 15 }}
+              className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-sm w-full overflow-hidden relative z-50"
+            >
+              {/* Header */}
+              <div className="bg-rose-500 p-5 text-center text-white relative">
+                <h3 className="font-display text-base font-extrabold tracking-tight">학습 기록 삭제 🐸</h3>
+              </div>
+
+              {/* Content Body */}
+              <div className="p-6 text-center space-y-3">
+                <p className="text-sm font-extrabold text-slate-800 leading-relaxed">
+                  이 학습 기록을 정말 삭제하시겠습니까?
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  관련된 모든 복습 임무와 타임라인 일정이 영구적으로 삭제되며 복구할 수 없습니다.
+                </p>
+              </div>
+
+              {/* Action buttons */}
+              <div className="bg-slate-50 px-5 py-4 flex items-center justify-end gap-2 border-t border-slate-100 text-xs font-bold">
+                <button
+                  onClick={() => setDeleteTargetId(null)}
+                  className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl transition cursor-pointer"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={confirmDeleteSession}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-xl transition cursor-pointer"
+                >
+                  네, 삭제합니다
                 </button>
               </div>
             </motion.div>
