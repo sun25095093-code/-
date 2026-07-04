@@ -110,8 +110,15 @@ function getKoreanDayOfWeek(dateStr: string): string {
 }
 
 // === SUPABASE BACKGROUND INITIALIZATION ===
-const SB_URL = process.env.SUPABASE_URL || '';
-const SB_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SB_URL = 
+  (typeof process !== 'undefined' ? (process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL) : '') || 
+  ((import.meta as any).env ? ((import.meta as any).env.VITE_SUPABASE_URL as string) : '') || 
+  '';
+
+const SB_KEY = 
+  (typeof process !== 'undefined' ? (process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY) : '') || 
+  ((import.meta as any).env ? ((import.meta as any).env.VITE_SUPABASE_ANON_KEY as string) : '') || 
+  '';
 
 let supabaseClient: any = null;
 if (SB_URL && SB_KEY) {
@@ -1161,17 +1168,37 @@ export default function App() {
                     )}
                   </div>
                 ) : (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-100 p-2.5 rounded-lg text-[10.5px] leading-relaxed">
-                    <p className="font-extrabold mb-1">💡 해결 방법:</p>
-                    <ol className="list-decimal list-inside space-y-1 text-[10px] text-red-200">
-                      <li>AI Studio 오른쪽 상단의 <b>Settings</b> 메뉴를 엽니다.</li>
-                      <li><b>Environment Variables</b>에 아래 변수들을 똑같이 추가합니다:</li>
-                      <ul className="list-disc list-inside ml-2.5 font-mono text-[9px] text-white">
-                        <li><code className="bg-white/10 px-0.5 rounded">SUPABASE_URL</code></li>
-                        <li><code className="bg-white/10 px-0.5 rounded">SUPABASE_ANON_KEY</code></li>
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-100 p-2.5 rounded-lg text-[10.5px] leading-relaxed space-y-2">
+                    <p className="font-extrabold text-amber-200">💡 환경변수 미설정 해결 방법:</p>
+                    
+                    <div className="space-y-1">
+                      <p className="font-bold text-[10.5px] text-white">1. AI Studio 미리보기용:</p>
+                      <ul className="list-disc list-inside ml-1 text-[10px] text-red-200 space-y-0.5">
+                        <li>우측 상단 <b>Settings</b> 메뉴 클릭</li>
+                        <li><b>Environment Variables</b>에 등록:</li>
+                        <div className="ml-3 font-mono text-[9px] text-white space-y-0.5">
+                          <div>- <code className="bg-white/15 px-1 rounded text-green-300">SUPABASE_URL</code></div>
+                          <div>- <code className="bg-white/15 px-1 rounded text-green-300">SUPABASE_ANON_KEY</code></div>
+                        </div>
+                        <li>등록 후 <b>빌드 서버 리스타트</b> & 새로고침</li>
                       </ul>
-                      <li>수정 후, <b>빌드 서버 리스타트</b> 및 <b>새로고침</b>이 필수입니다.</li>
-                    </ol>
+                    </div>
+
+                    <div className="space-y-1 pt-1.5 border-t border-white/5">
+                      <p className="font-bold text-[10.5px] text-white">2. Vercel 배포용 (중요):</p>
+                      <p className="text-[10px] text-red-200 leading-normal">
+                        Vite 앱은 브라우저 노출을 위해 반드시 접두사 <code className="bg-white/10 px-0.5 rounded text-white font-mono">VITE_</code>가 붙은 환경변수가 필요합니다.
+                      </p>
+                      <ul className="list-disc list-inside ml-1 text-[10px] text-red-200 space-y-0.5">
+                        <li>Vercel 대시보드 &gt; <b>Settings</b> &gt; <b>Environment Variables</b> 진입</li>
+                        <li>아래 두 변수를 똑같이 추가:</li>
+                        <div className="ml-3 font-mono text-[9px] text-white space-y-0.5">
+                          <div>- <code className="bg-white/15 px-1 rounded text-yellow-300">VITE_SUPABASE_URL</code></div>
+                          <div>- <code className="bg-white/15 px-1 rounded text-yellow-300">VITE_SUPABASE_ANON_KEY</code></div>
+                        </div>
+                        <li>추가 후 <b>Deployments</b> 탭에서 <b>Redeploy(재배포)</b> 진행</li>
+                      </ul>
+                    </div>
                   </div>
                 )}
               </div>
