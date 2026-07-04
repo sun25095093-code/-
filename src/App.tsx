@@ -129,7 +129,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateString());
   
   // Input fields
-  const [subject, setSubject] = useState<string>('수1'); // Default '수1'
+  const [subject, setSubject] = useState<string>('수1(1권)'); // Default '수1(1권)'
   const [startPage, setStartPage] = useState<string>('');
   const [endPage, setEndPage] = useState<string>('');
 
@@ -179,8 +179,11 @@ export default function App() {
       
       if (error) {
         console.warn("Supabase load warning (using LocalStorage fallback):", error.message || error);
+        // If it's a structural or credential issue, capture it gracefully
         if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           setSupabaseError('missing_table');
+        } else if (error.message?.includes('JWT') || error.message?.includes('apiKey') || error.message?.includes('invalid')) {
+          setSupabaseError('credentials');
         } else {
           setSupabaseError('general');
         }
@@ -191,18 +194,19 @@ export default function App() {
           subject: item.subject,
           startPage: item.start_page,
           endPage: item.end_page,
-          createdAt: item.created_at,
+          createdAt: item.created_at || Date.now(),
           review2Date: item.review2_date || calculateFutureDateExcludingSundays(item.date, 4),
           review3Date: item.review3_date || calculateFutureDateExcludingSundays(item.date, 7),
           review4Date: item.review4_date || calculateFutureDateExcludingSundays(item.date, 15),
           completedReviews: {
-            review2: item.completed_review2,
-            review3: item.completed_review3,
-            review4: item.completed_review4
+            review2: !!item.completed_review2,
+            review3: !!item.completed_review3,
+            review4: !!item.completed_review4
           }
         }));
         setSessions(formatted);
         localStorage.setItem('spaced_study_sessions', JSON.stringify(formatted));
+        setSupabaseError(null);
       }
     } catch (err: any) {
       console.warn("Supabase catch load warning:", err?.message || err);
@@ -248,13 +252,29 @@ export default function App() {
         }));
 
         if (mapped.length > 0) {
-          const { error } = await supabaseClient
+          // 1차 시도: 전체 컬럼 upsert
+          let { error } = await supabaseClient
               .from('spaced_study_sessions')
               .upsert(mapped);
+          
+          // [Schema Self-Healing Fallback]
+          // 만약 특정 컬럼이 없어서(42703: undefined_column 등) 에러가 발생한 경우, 
+          // 에이징 날짜 컬럼(review2_date 등)을 제외하고 필수 코어 컬럼으로만 2차 시도
+          if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
+            console.warn("Schema mismatch detected. Retrying upsert with core columns only...");
+            const minimalMapped = mapped.map(({ review2_date, review3_date, review4_date, ...rest }) => rest);
+            const { error: retryError } = await supabaseClient
+              .from('spaced_study_sessions')
+              .upsert(minimalMapped);
+            error = retryError;
+          }
+
           if (error) {
             console.warn("Supabase upsert warning:", error.message || error);
             if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
               setSupabaseError('missing_table');
+            } else if (error.message?.includes('JWT') || error.message?.includes('apiKey') || error.message?.includes('invalid')) {
+              setSupabaseError('credentials');
             } else {
               setSupabaseError('general');
             }
@@ -580,13 +600,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Subject Tag Choices (수1, 수2, 확통 3가지) */}
+              {/* Subject Tag Choices (6가지) */}
               <div className="space-y-2.5">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">
                   공부할 과목 선택
                 </label>
-                <div className="grid grid-cols-3 gap-2.5">
-                  {['수1', '수2', '확통'].map((sub) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                  {['수1(1권)', '수1(2권)', '수2(3권)', '수2(4권)', '확통(5권)', '확통(6권)'].map((sub) => (
                     <button
                       key={sub}
                       type="button"
@@ -1069,9 +1089,6 @@ export default function App() {
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">등록된 최초 학습 데이터의 일요일 제외 복습 수행 현황을 전체적으로 통합 관리합니다. (오래된 순부터 정렬)</p>
             </div>
-            <span className="text-xs font-bold bg-slate-50 text-slate-500 border border-slate-100 rounded-xl px-3 py-1.5">
-              세션 합계: <span className="text-green-600 font-extrabold">{sessions.length}</span> 개
-            </span>
           </div>
 
           {sessions.length > 0 ? (
