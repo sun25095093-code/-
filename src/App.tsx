@@ -157,6 +157,7 @@ export default function App() {
   // Sync state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
+  const [supabaseRawError, setSupabaseRawError] = useState<string | null>(null);
 
   // Date Picker ref & custom overlays
   const dateInputRef = React.useRef<HTMLInputElement>(null);
@@ -183,6 +184,7 @@ export default function App() {
     if (!supabaseClient) return;
     setIsSyncing(true);
     setSupabaseError(null);
+    setSupabaseRawError(null);
     try {
       const { data, error } = await supabaseClient
         .from('spaced_study_sessions')
@@ -191,6 +193,7 @@ export default function App() {
       
       if (error) {
         console.warn("Supabase load warning (using LocalStorage fallback):", error.message || error);
+        setSupabaseRawError(error.message || String(error));
         // If it's a structural or credential issue, capture it gracefully
         if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
           setSupabaseError('missing_table');
@@ -219,9 +222,11 @@ export default function App() {
         setSessions(formatted);
         localStorage.setItem('spaced_study_sessions', JSON.stringify(formatted));
         setSupabaseError(null);
+        setSupabaseRawError(null);
       }
     } catch (err: any) {
       console.warn("Supabase catch load warning:", err?.message || err);
+      setSupabaseRawError(err?.message || String(err));
       setSupabaseError('general');
     } finally {
       setIsSyncing(false);
@@ -235,6 +240,8 @@ export default function App() {
 
     if (supabaseClient) {
       setIsSyncing(true);
+      setSupabaseError(null);
+      setSupabaseRawError(null);
       try {
         // If it's a delete, remove from Supabase
         if (deletedId) {
@@ -244,6 +251,7 @@ export default function App() {
             .eq('id', deletedId);
           if (delError) {
             console.warn("Supabase delete warning:", delError.message);
+            setSupabaseRawError(delError.message);
           }
         }
 
@@ -283,6 +291,7 @@ export default function App() {
 
           if (error) {
             console.warn("Supabase upsert warning:", error.message || error);
+            setSupabaseRawError(error.message || String(error));
             if (error.code?.startsWith('42') || error.message?.includes('relation') || error.message?.includes('does not exist')) {
               setSupabaseError('missing_table');
             } else if (error.message?.includes('JWT') || error.message?.includes('apiKey') || error.message?.includes('invalid')) {
@@ -292,12 +301,15 @@ export default function App() {
             }
           } else {
             setSupabaseError(null);
+            setSupabaseRawError(null);
           }
         } else {
           setSupabaseError(null);
+          setSupabaseRawError(null);
         }
       } catch (err: any) {
         console.warn("Supabase sync catch warning:", err?.message || err);
+        setSupabaseRawError(err?.message || String(err));
         setSupabaseError('general');
       } finally {
         setIsSyncing(false);
@@ -1064,7 +1076,7 @@ export default function App() {
             </div>
 
             {/* Quick dashboard stats */}
-            <div className="grid grid-cols-3 gap-3.5">
+            <div className="grid grid-cols-3 gap-3.5 mb-5">
               <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
                 <Flame className="w-4 h-4 text-orange-400 mx-auto mb-1.5" />
                 <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">학습 연속</span>
@@ -1079,6 +1091,89 @@ export default function App() {
                 <TrendingUp className="w-4 h-4 text-yellow-300 mx-auto mb-1.5" />
                 <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">복습 완료율</span>
                 <span className="text-sm sm:text-base font-extrabold block">{reviewCompletionRate}%</span>
+              </div>
+            </div>
+
+            {/* Supabase Connectivity & Diagnostics Widget */}
+            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-left text-xs space-y-3">
+              <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                <span className="font-extrabold tracking-wider text-green-100 flex items-center gap-1.5">
+                  <span className="inline-block w-2 h-2 rounded-full bg-white animate-ping"></span>
+                  Supabase 연동 상태 진단
+                </span>
+                <button
+                  type="button"
+                  disabled={isSyncing}
+                  onClick={() => {
+                    if (supabaseClient) {
+                      fetchFromSupabase();
+                    } else {
+                      window.location.reload();
+                    }
+                  }}
+                  className="p-1 hover:bg-white/10 rounded-lg transition-all active:scale-95 disabled:opacity-50 text-white cursor-pointer"
+                  title="연동 데이터 수동 새로고침"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                </button>
+              </div>
+
+              {/* Status details */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-green-200">연동 클라이언트:</span>
+                  <span className={`font-extrabold px-1.5 py-0.5 rounded text-[10px] ${supabaseClient ? 'bg-green-400/20 text-green-100' : 'bg-red-500/20 text-red-100'}`}>
+                    {supabaseClient ? '활성화 (OK)' : '비활성화 (Missing)'}
+                  </span>
+                </div>
+
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="text-green-200">환경변수 등록 상태:</span>
+                  <span className="font-mono text-[10px]">
+                    URL: {SB_URL ? '✅ 등록됨' : '❌ 미설정'} | Key: {SB_KEY ? '✅ 등록됨' : '❌ 미설정'}
+                  </span>
+                </div>
+
+                {supabaseClient ? (
+                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
+                    <span className="text-green-200 text-[10px] block">마지막 연동 상태:</span>
+                    {supabaseError ? (
+                      <div className="bg-amber-500/20 border border-amber-500/30 text-amber-100 p-2 rounded-lg text-[10.5px] leading-relaxed space-y-1">
+                        <p className="font-extrabold">⚠️ 연동 오류 감지</p>
+                        {supabaseError === 'missing_table' && (
+                          <p>Supabase에 <code className="bg-white/10 px-1 rounded text-white font-mono">spaced_study_sessions</code> 테이블이 없거나 권한이 없습니다. SQL 스크립트를 올바르게 실행했는지 확인해주세요.</p>
+                        )}
+                        {supabaseError === 'credentials' && (
+                          <p>API Key/URL 자격증명이 잘못되었습니다. 복사 붙여넣기 시 공백이 포함되었는지 확인하세요.</p>
+                        )}
+                        {supabaseError === 'general' && (
+                          <p>일반 에러: {supabaseRawError || '연결 실패'}</p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="bg-green-400/20 border border-green-400/30 text-green-100 p-2 rounded-lg text-[10.5px] flex items-center gap-2">
+                        <span className="text-sm">🐸</span>
+                        <div>
+                          <p className="font-extrabold">실시간 클라우드 동기화 중</p>
+                          <p className="text-[9.5px] text-green-200 mt-0.5">최초 진도 등록 및 체크 상태가 Supabase에 즉시 백업되고 있습니다.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-100 p-2.5 rounded-lg text-[10.5px] leading-relaxed">
+                    <p className="font-extrabold mb-1">💡 해결 방법:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-[10px] text-red-200">
+                      <li>AI Studio 오른쪽 상단의 <b>Settings</b> 메뉴를 엽니다.</li>
+                      <li><b>Environment Variables</b>에 아래 변수들을 똑같이 추가합니다:</li>
+                      <ul className="list-disc list-inside ml-2.5 font-mono text-[9px] text-white">
+                        <li><code className="bg-white/10 px-0.5 rounded">SUPABASE_URL</code></li>
+                        <li><code className="bg-white/10 px-0.5 rounded">SUPABASE_ANON_KEY</code></li>
+                      </ul>
+                      <li>수정 후, <b>빌드 서버 리스타트</b> 및 <b>새로고침</b>이 필수입니다.</li>
+                    </ol>
+                  </div>
+                )}
               </div>
             </div>
 
