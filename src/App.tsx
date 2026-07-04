@@ -110,8 +110,8 @@ function getKoreanDayOfWeek(dateStr: string): string {
 }
 
 // === SUPABASE BACKGROUND INITIALIZATION ===
-const SB_URL = (typeof process !== 'undefined' ? process.env.SUPABASE_URL : '') || '';
-const SB_KEY = (typeof process !== 'undefined' ? process.env.SUPABASE_ANON_KEY : '') || '';
+const SB_URL = process.env.SUPABASE_URL || '';
+const SB_KEY = process.env.SUPABASE_ANON_KEY || '';
 
 let supabaseClient: any = null;
 if (SB_URL && SB_KEY) {

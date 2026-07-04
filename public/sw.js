@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gaegul-cache-v1';
+const CACHE_NAME = 'gaegul-cache-v2';
 const ASSETS = [
   '/',
   '/index.html',
@@ -7,17 +7,36 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (e) => {
   e.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS);
-    })
+    caches.keys().then((keys) => {
+      return Promise.all(
+        keys.map((key) => {
+          return caches.delete(key);
+        })
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
+// Network-first strategy for index.html and JS assets to prevent blank screens after new deployments
 self.addEventListener('fetch', (e) => {
-  e.respondWith(
-    caches.match(e.request).then((cachedResponse) => {
-      return cachedResponse || fetch(e.request);
-    })
-  );
+  const url = new URL(e.request.url);
+  
+  if (url.pathname === '/' || url.pathname === '/index.html' || url.pathname.startsWith('/assets/')) {
+    e.respondWith(
+      fetch(e.request).catch(() => {
+        return caches.match(e.request);
+      })
+    );
+  } else {
+    e.respondWith(
+      caches.match(e.request).then((cachedResponse) => {
+        return cachedResponse || fetch(e.request);
+      })
+    );
+  }
 });
