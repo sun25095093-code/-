@@ -142,6 +142,11 @@ export default function App() {
   const [currentCalendarYear, setCurrentCalendarYear] = useState<number>(new Date().getFullYear());
   const [currentCalendarMonth, setCurrentCalendarMonth] = useState<number>(new Date().getMonth()); // 0-indexed
 
+  // Custom Floating Date Picker Popover States
+  const [showDatePickerPopup, setShowDatePickerPopup] = useState<boolean>(false);
+  const [popupYear, setPopupYear] = useState<number>(new Date().getFullYear());
+  const [popupMonth, setPopupMonth] = useState<number>(new Date().getMonth()); // 0-indexed
+
   // Sync state
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [supabaseError, setSupabaseError] = useState<string | null>(null);
@@ -520,67 +525,41 @@ export default function App() {
               <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
               <span>{supabaseError ? '로컬 저장소 자동 백업 모드' : '실시간 클라우드 동기화 중'}</span>
             </div>
-            {supabaseError && (
-              <span className="text-[10px] text-amber-600 font-bold max-w-[280px] text-right leading-tight">
-                {supabaseError === 'missing_table' 
-                  ? '"spaced_study_sessions" 테이블이 없습니다. 모든 기록은 브라우저에 안전히 저장됩니다.' 
-                  : '클라우드 연동에 일시적인 지연이 있어 로컬 저장소로 작동합니다.'}
-              </span>
-            )}
           </div>
         )}
       </header>
 
       {/* MAIN CONTAINER (2-Column Grid beautifully balanced for tablet & desktop) */}
-      <main className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10">
+      <main className="relative z-10 max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 grid grid-cols-1 md:grid-cols-12 gap-8 lg:gap-10">
         
         {/* LEFT COLUMN: Study entry & Calendar progress */}
-        <section className="flex flex-col space-y-6 lg:col-span-6">
+        <section className="flex flex-col space-y-6 md:col-span-6">
           
-          {/* STUDY INPUT CARD (Phase 01: Initial Learning) */}
+          {/* STUDY INPUT CARD */}
           <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8 flex flex-col relative overflow-hidden" id="study-input-form-wrapper">
             <div className="mb-5">
-              <span className="inline-block px-3 py-1 bg-green-50 text-green-600 text-[10px] font-bold rounded-full mb-2 uppercase tracking-widest">
-                Phase 01: Initial Learning
-              </span>
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-800 tracking-tight">오늘 공부할 최초 진도 등록</h2>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
-              {/* Native styled date picker with large touch target */}
-              <div className="flex flex-col space-y-1.5">
+              {/* Elegant native browser-supported date picker wrapper */}
+              <div className="flex flex-col space-y-1.5 relative">
                 <label className="text-xs font-bold text-slate-400 uppercase ml-1 block">
                   최초 학습일 날짜 선택
                 </label>
-                <div 
-                  onClick={() => {
-                    try {
-                      if (dateInputRef.current) {
-                        if (typeof dateInputRef.current.showPicker === 'function') {
-                          dateInputRef.current.showPicker();
-                        } else {
-                          dateInputRef.current.click();
-                        }
-                      }
-                    } catch (e) {
-                      dateInputRef.current?.click();
-                    }
-                  }}
-                  className="relative flex items-center bg-slate-50/50 hover:bg-slate-50 border-2 border-slate-100 rounded-2xl p-4.5 lg:p-5 transition-all duration-300 cursor-pointer select-none"
-                >
+                <div className="relative flex items-center bg-slate-50/50 hover:bg-slate-50 border-2 border-slate-100 rounded-2xl p-4.5 lg:p-5 transition-all duration-300 cursor-pointer select-none">
                   <span className="text-xl mr-3">📅</span>
                   <span className="text-sm sm:text-base font-extrabold text-slate-800">
                     {selectedDate ? `${selectedDate.split('-')[0]}년 ${selectedDate.split('-')[1]}월 ${selectedDate.split('-')[2]}일` : '날짜 선택'}
                   </span>
                   
-                  {/* Hidden native input picker triggered by container click */}
+                  {/* Invisible native input covering the container to display native default browser/forms date picker */}
                   <input 
-                    ref={dateInputRef}
                     type="date" 
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                    style={{ colorScheme: 'light' }}
                   />
 
                   <button
@@ -589,11 +568,7 @@ export default function App() {
                       e.stopPropagation();
                       setSelectedDate(getTodayDateString());
                     }}
-                    className={`absolute right-4 top-1/2 -translate-y-1/2 text-xs font-extrabold px-4 py-2 rounded-xl transition-all cursor-pointer z-10 active:scale-95 shadow-sm ${
-                      selectedDate === getTodayDateString()
-                        ? 'bg-green-500 text-white'
-                        : 'bg-slate-200 hover:bg-slate-300 text-slate-700'
-                    }`}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-extrabold px-4 py-2 rounded-xl transition-all cursor-pointer z-30 active:scale-95 shadow-sm bg-slate-200 hover:bg-slate-300 text-slate-700"
                   >
                     오늘
                   </button>
@@ -829,7 +804,7 @@ export default function App() {
         </section>
 
         {/* RIGHT COLUMN: Today's review missions & Mascot summary card */}
-        <section className="flex flex-col space-y-6 lg:col-span-6">
+        <section className="flex flex-col space-y-6 md:col-span-6">
           
           {/* TODAY'S REVIEWS MISSON LIST */}
           <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8 flex flex-col">
