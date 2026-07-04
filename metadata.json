@@ -1,0 +1,6 @@
+{
+  "name": "복습 자동화 공부 도우미",
+  "description": "최초 학습일을 입력하면 4일 후, 1주일 후, 2주일 후의 복습 주기를 자동으로 계산해 알려주고, 오늘 복습해야 할 범위를 완벽히 추적해주는 지능형 학습 도우미입니다. 학습 완료 시 귀여운 행운의 메시지와 에너지를 얻을 수 있습니다.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

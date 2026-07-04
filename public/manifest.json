@@ -1,0 +1,18 @@
+{
+  "name": "개굴개굴",
+  "short_name": "개굴개굴",
+  "description": "복습 자동화 공부 도우미",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#F8FAFC",
+  "theme_color": "#22C55E",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

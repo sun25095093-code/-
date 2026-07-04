@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <rect width="512" height="512" rx="112" fill="#22C55E"/>
+  <!-- Eyes background -->
+  <circle cx="180" cy="200" r="60" fill="#FFFFFF"/>
+  <circle cx="332" cy="200" r="60" fill="#FFFFFF"/>
+  <!-- Pupils -->
+  <circle cx="180" cy="200" r="30" fill="#1E293B"/>
+  <circle cx="332" cy="200" r="30" fill="#1E293B"/>
+  <circle cx="190" cy="190" r="10" fill="#FFFFFF"/>
+  <circle cx="342" cy="190" r="10" fill="#FFFFFF"/>
+  <!-- Frog face/mouth area -->
+  <path d="M 100,280 Q 256,230 412,280 Q 430,380 256,420 Q 82,380 100,280 Z" fill="#4ADE80"/>
+  <!-- Rosy cheeks -->
+  <circle cx="140" cy="320" r="25" fill="#F87171" opacity="0.6"/>
+  <circle cx="372" cy="320" r="25" fill="#F87171" opacity="0.6"/>
+  <!-- Cute mouth -->
+  <path d="M 216,330 Q 256,360 296,330" stroke="#1E293B" stroke-width="12" stroke-linecap="round" fill="none"/>
+</svg>
