@@ -29,6 +29,7 @@ interface StudySession {
   review2Date?: string; // Calculated D+4 review date
   review3Date?: string; // Calculated D+7 review date
   review4Date?: string; // Calculated D+15 review date
+  completedNew?: boolean; // 당일 최초 신규 진도 완료 여부
   completedReviews: {
     review2: boolean; // 4일 후 복습 완료 여부
     review3: boolean; // 7일 후 복습 완료 여부
@@ -39,16 +40,101 @@ interface StudySession {
 interface LuckMessage {
   text: string;
   character: string;
+  emoji?: string;
 }
 
 // === LUCKY MESSAGES DATA ===
 const LUCKY_MESSAGES: LuckMessage[] = [
-  { text: "오늘 공부를 완벽하게 해내셨군요! 머릿속 지식이 무럭무럭 자라는 중이에요! 🐸💚", character: "🐸 아기 개구리 요정" },
-  { text: "포기하지 않고 끝까지 마친 당신이 진정한 챔피언! 시원하고 싱그러운 달콤함을 선물하세요. 🍦🏆", character: "🐸 초록 청개구리 코치" },
-  { text: "오늘 입력한 페이지들이 미래의 당신을 반짝반짝 빛나게 해줄 소중한 자산이 될 거예요! 💎✨", character: "🐸 행운의 연잎 요정" },
-  { text: "뇌가 무럭무럭 자라는 소리가 들려요! 오늘 밤 푹 자면 지식이 장기기억으로 쏙 저장됩니다. 🧠🌙", character: "🦉 지혜로운 부엉이 교수" },
-  { text: "대단해요! 오늘의 성취는 내일의 큰 도약이 될 거예요. 가볍게 기지개 켜고 기분 좋게 쉬어봐요! 🌿🙆‍♂️", character: "🐾 귀여운 개구리 친구" },
-  { text: "크으, 집중력 대단하십니다! 럭키 코인 한 개를 획득하셨습니다. 내일도 행운이 가득할 거예요! 🪙🍀", character: "🐸 영리한 개구리 가이드" }
+  { text: "오늘 공부를 완벽하게 해내셨군요! 머릿속 지식이 무럭무럭 자라는 중이에요! 🐸💚", character: "🐸 아기 개구리 요정", emoji: "🐸🧚‍♀️" },
+  { text: "포기하지 않고 끝까지 마친 당신이 진정한 챔피언! 시원하고 싱그러운 달콤함을 선물하세요. 🍦🏆", character: "🐸 초록 청개구리 코치", emoji: "🐸📣" },
+  { text: "오늘 입력한 페이지들이 미래의 당신을 반짝반짝 빛나게 해줄 소중한 자산이 될 거예요! 💎✨", character: "🐸 행운의 연잎 요정", emoji: "🐸🍀" },
+  { text: "뇌가 무럭무럭 자라는 소리가 들려요! 오늘 밤 푹 자면 지식이 장기기억으로 쏙 저장됩니다. 🧠🌙", character: "🦉 지혜로운 부엉이 교수", emoji: "🦉🎓" },
+  { text: "대단해요! 오늘의 성취는 내일의 큰 도약이 될 거예요. 가볍게 기지개 켜고 기분 좋게 쉬어봐요! 🌿🙆‍♂️", character: "🐾 귀여운 개구리 친구", emoji: "🐸🌱" },
+  { text: "크으, 집중력 대단하십니다! 럭키 코인 한 개를 획득하셨습니다. 내일도 행운이 가득할 거예요! 🪙🍀", character: "🐸 영리한 개구리 가이드", emoji: "🐸🪙" }
+];
+
+const FROG_NAMES_POOL = [
+  '은구리',
+  '형구리',
+  '가구리',
+  '시구리',
+  '효구리',
+  '깨구리',
+  '올챙이',
+  '초록이',
+  '왕구리',
+  '연잎이'
+];
+
+// === 20 TYPES OF FROG CHARACTERS & 20 ENCOURAGING MESSAGES ===
+const FROG_CHARACTERS = [
+  "🐸 아기 초록 개구리",
+  "🐸 독서광 청개구리",
+  "🐸 연잎 우산 개구리",
+  "🐸 안경 쓴 박사 개구리",
+  "🐸 왕관 입은 황소개구리",
+  "🐸 황금 행운 개구리",
+  "🐸 비행사 아기 청개구리",
+  "🐸 하와이안 셔츠 개구리",
+  "🐸 졸린 잠옷 청개구리",
+  "🐸 등산 마니아 숲개구리",
+  "🐸 리본 단 분홍 청개구리",
+  "🐸 서핑 타는 바다 청개구리",
+  "🐸 바리스타 원두 개구리",
+  "🐸 헤드폰 낀 힙합 청개구리",
+  "🐸 마법사 모자 쓴 개구리",
+  "🐸 기타치는 음유시인 개구리",
+  "🐸 탐정 돋보기 청개구리",
+  "🐸 셰프 모자 요리사 개구리",
+  "🐸 화가 베레모 청개구리",
+  "🐸 우주인 헬멧 은하 개구리"
+];
+
+const FROG_EMOJIS = [
+  "🐸",      // 아기 초록 개구리
+  "🐸📚",     // 독서광 청개구리
+  "🐸☂️",     // 연잎 우산 개구리
+  "🐸👓",     // 안경 쓴 박사 개구리
+  "👑🐸",     // 왕관 입은 황소개구리
+  "🪙🐸",     // 황금 행운 개구리
+  "🐸✈️",     // 비행사 아기 청개구리
+  "🐸🌴",     // 하와이안 셔츠 개구리
+  "💤🐸",     // 졸린 잠옷 청개구리
+  "🐸🎒",     // 등산 마니아 숲개구리
+  "🎀🐸",     // 리본 단 분홍 청개구리
+  "🏄‍♂️🐸",     // 서핑 타는 바다 청개구리
+  "☕🐸",     // 바리스타 원두 개구리
+  "🎧🐸",     // 헤드폰 낀 힙합 청개구리
+  "🧙‍♂️🐸",     // 마법사 모자 쓴 개구리
+  "🎸🐸",     // 기타치는 음유시인 개구리
+  "🔍🐸",     // 탐정 돋보기 청개구리
+  "🍳🐸",     // 셰프 모자 요리사 개구리
+  "🎨🐸",     // 화가 베레모 청개구리
+  "🚀🐸"      // 우주인 헬멧 은하 개구리
+];
+
+const FROG_MESSAGES = [
+  "오늘 공부를 완벽하게 해내셨군요! 머릿속 지식이 무럭무럭 자라는 중이에요! 🐸💚",
+  "포기하지 않고 끝까지 마친 당신이 진정한 챔피언! 시원하게 기지개 한 번 켜볼까요? 🏆✨",
+  "오늘 입력한 페이지들이 미래의 당신을 반짝반짝 빛나게 해줄 소중한 자산이 될 거예요! 💎🌱",
+  "뇌가 무럭무럭 자라는 소리가 들려요! 오늘 밤 푹 자면 장기기억으로 쏙 저장됩니다. 🧠🌙",
+  "대단해요! 오늘의 성취는 내일의 큰 도약이 될 거예요. 가볍게 물 한 잔 마시며 쉬어봐요! 💧🙆‍♂️",
+  "크으, 집중력 대단하십니다! 럭키 개구리 코인 한 개를 획득하셨습니다! 🪙🍀",
+  "한 걸음 한 걸음이 모여 큰 강을 이룹니다. 오늘도 꾸준히 해낸 자신을 칭찬해주세요! 🌊💚",
+  "공부하느라 정말 수고 많으셨어요! 연잎 침대에서 시원한 바람을 맞으며 꿀맛 같은 휴식을 취하세요! 🍃😴",
+  "지치지 않고 완주한 오늘 하루, 당신의 끈기에 청개구리 박수를 보냅니다! 👏👏🐸",
+  "어려운 고비도 거뜬히 넘기다니 대단해요! 실력이 쑥쑥 자라는 소리가 들려요! 📈🌟",
+  "포기하고 싶은 순간을 견뎌낸 당신은 최고의 영웅! 기분 좋은 상상과 함께 오늘을 마무리해요! 🦸‍♂️💚",
+  "오늘의 노력이 씨앗이 되어 멋진 꽃을 피울 거예요. 물조리개로 매일 정성을 주는 당신이 최고! 🌸🚿",
+  "눈을 감고 깊은 숨을 내쉬어 보세요. 오늘 하루도 정말 가치 있는 성장을 이뤄냈습니다! 🧘‍♂️✨",
+  "복습 타임라인에 불이 반짝반짝 켜지는 순간이 가장 짜릿해요! 멋진 페이스를 유지해보세요! 🔥🎯",
+  "스스로와의 약속을 멋지게 지켜낸 오늘, 당신은 누구보다 믿음직한 사람입니다! 🤝💚",
+  "와우! 머릿속이 지식으로 꽉 차서 개구리 왕관이 더 무거워진 느낌이에요! 👑💡",
+  "한 장 한 장 넘길 때마다 미래의 합격과 성공이 한 발짝 더 가까워집니다! 🛤️🎉",
+  "힘들었을 텐데 끝까지 버텨낸 근성에 엄지척! 시원한 수박 한 입 베어 문 것처럼 개운하네요! 🍉👍",
+  "오늘도 어김없이 연잎 위에 올라와 성실함을 증명한 당신을 격하게 응원합니다! 🐸📣",
+  "지식의 바다를 멋지게 수영하는 영웅이시군요! 오늘 미션도 멋지게 올클리어! 🏊‍♂️🌟",
+  "이것은 시현이가 숨겨둔 시스터에그다! 맛있는 거 사주기 쿠폰 증정 개굴🫧❤️"
 ];
 
 // === DATE HELPER FUNCTIONS (일요일 제외 주기 계산) ===
@@ -130,6 +216,118 @@ if (SB_URL && SB_KEY) {
   }
 }
 
+// === WEBAUDIO FROG CROAK (개굴) SYNTHESIZER ===
+const playGaegulSound = () => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+    const ctx = new AudioContext();
+    const now = ctx.currentTime;
+    
+    // Play two rapid pulses for "개굴!" - bouncy cartoon style
+    createCroakPulse(ctx, now, 1.0);
+    createCroakPulse(ctx, now + 0.12, 1.25);
+  } catch (err) {
+    console.warn("Audio Context playback failed:", err);
+  }
+};
+
+const playSuccessSound = () => {
+  const paths = ['/success.mp3', '/success.mp3.mp3', '/croak.mp3'];
+  let index = 0;
+
+  const tryPlay = () => {
+    if (index >= paths.length) {
+      console.warn("Could not play any custom MP3. Playing synthesized gaegul sound instead.");
+      playGaegulSound();
+      return;
+    }
+
+    const audio = new Audio(paths[index]);
+    audio.volume = 0.5; // Set starting volume to 50%
+    audio.play()
+      .then(() => {
+        console.log(`Custom ${paths[index]} played successfully!`);
+        // Limit playback to 1.5 seconds with a smooth fade-out starting at 1.2s
+        setTimeout(() => {
+          let volume = 0.5;
+          const fadeInterval = setInterval(() => {
+            volume -= 0.05;
+            if (volume <= 0) {
+              clearInterval(fadeInterval);
+              audio.pause();
+              audio.currentTime = 0;
+            } else {
+              audio.volume = Math.max(0, volume);
+            }
+          }, 30); // 300ms fade-out
+        }, 1200);
+      })
+      .catch((err) => {
+        console.warn(`Failed to play ${paths[index]}, trying next...`, err);
+        index++;
+        tryPlay();
+      });
+  };
+
+  tryPlay();
+};
+
+const createCroakPulse = (ctx: AudioContext, startTime: number, pitchMultiplier = 1.0) => {
+  const osc = ctx.createOscillator();
+  const osc2 = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const filter = ctx.createBiquadFilter();
+  
+  // Cartoonish spring/croak frequency sweep
+  const baseFreq = 140 * pitchMultiplier;
+  const peakFreq = 480 * pitchMultiplier;
+  const endFreq = 120 * pitchMultiplier;
+
+  osc.type = 'triangle'; // Smoother tone for cartoon feel
+  osc.frequency.setValueAtTime(baseFreq, startTime);
+  osc.frequency.linearRampToValueAtTime(peakFreq, startTime + 0.05);
+  osc.frequency.exponentialRampToValueAtTime(endFreq, startTime + 0.14);
+
+  // Add a subtle sawtooth oscillator for "buzz" texture/timbre
+  osc2.type = 'sawtooth';
+  osc2.frequency.setValueAtTime(baseFreq * 0.5, startTime);
+  osc2.frequency.linearRampToValueAtTime(peakFreq * 0.5, startTime + 0.05);
+  osc2.frequency.exponentialRampToValueAtTime(endFreq * 0.5, startTime + 0.14);
+
+  // Bandpass filter to mimic a frog's vocal chamber resonance
+  filter.type = 'bandpass';
+  filter.frequency.setValueAtTime(550 * pitchMultiplier, startTime);
+  filter.frequency.exponentialRampToValueAtTime(450 * pitchMultiplier, startTime + 0.14);
+  filter.Q.setValueAtTime(3.5, startTime); // High Q for vocal resonant quality
+  
+  const modulator = ctx.createOscillator();
+  const modGain = ctx.createGain();
+  modulator.type = 'sine';
+  modulator.frequency.setValueAtTime(55, startTime); // Fast vibration
+  modGain.gain.setValueAtTime(0.45, startTime);
+  
+  modulator.connect(modGain);
+  modGain.connect(gain.gain);
+  
+  gain.gain.setValueAtTime(0.01, startTime);
+  gain.gain.linearRampToValueAtTime(0.25, startTime + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.14);
+  
+  osc.connect(filter);
+  osc2.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  
+  osc.start(startTime);
+  osc2.start(startTime);
+  modulator.start(startTime);
+  
+  osc.stop(startTime + 0.15);
+  osc2.stop(startTime + 0.15);
+  modulator.stop(startTime + 0.15);
+};
+
 export default function App() {
   // === STATES ===
   const [sessions, setSessions] = useState<StudySession[]>([]);
@@ -154,6 +352,7 @@ export default function App() {
 
   // Modals & UI States
   const [showLuckyModal, setShowLuckyModal] = useState<boolean>(false);
+  const [modalType, setModalType] = useState<'register' | 'achievement100'>('register');
   const [currentLuckyMessage, setCurrentLuckyMessage] = useState<LuckMessage>(LUCKY_MESSAGES[0]);
   const [lastSavedSession, setLastSavedSession] = useState<StudySession | null>(null);
 
@@ -170,6 +369,28 @@ export default function App() {
   const dateInputRef = React.useRef<HTMLInputElement>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+
+  // Frog Pond states and Ref
+  const pondRef = React.useRef<HTMLDivElement>(null);
+  const [leftFrogName, setLeftFrogName] = useState<string>('공부중');
+  const [rightFrogName, setRightFrogName] = useState<string>('둥실');
+  const [centerFrogName, setCenterFrogName] = useState<string>('멘토개구리');
+
+  const handleFrogClick = (frogId: 'left' | 'right' | 'center') => {
+    const usedNames = [leftFrogName, rightFrogName, centerFrogName];
+    // Filter out names currently in use by any of the 3 frogs
+    const filteredPool = FROG_NAMES_POOL.filter(n => !usedNames.includes(n));
+    if (filteredPool.length === 0) return;
+
+    const randomName = filteredPool[Math.floor(Math.random() * filteredPool.length)];
+    if (frogId === 'left') {
+      setLeftFrogName(randomName);
+    } else if (frogId === 'right') {
+      setRightFrogName(randomName);
+    } else {
+      setCenterFrogName(randomName);
+    }
+  };
 
   // === INITIALIZATION FROM LOCAL STORAGE OR SUPABASE ===
   useEffect(() => {
@@ -220,6 +441,7 @@ export default function App() {
           review2Date: item.review2_date || calculateFutureDateExcludingSundays(item.date, 4),
           review3Date: item.review3_date || calculateFutureDateExcludingSundays(item.date, 7),
           review4Date: item.review4_date || calculateFutureDateExcludingSundays(item.date, 15),
+          completedNew: item.completed_new !== undefined ? !!item.completed_new : false,
           completedReviews: {
             review2: !!item.completed_review2,
             review3: !!item.completed_review3,
@@ -270,6 +492,7 @@ export default function App() {
           start_page: s.startPage,
           end_page: s.endPage,
           created_at: s.createdAt,
+          completed_new: s.completedNew || false,
           completed_review2: s.completedReviews.review2,
           completed_review3: s.completedReviews.review3,
           completed_review4: s.completedReviews.review4,
@@ -286,10 +509,10 @@ export default function App() {
           
           // [Schema Self-Healing Fallback]
           // 만약 특정 컬럼이 없어서(42703: undefined_column 등) 에러가 발생한 경우, 
-          // 에이징 날짜 컬럼(review2_date 등)을 제외하고 필수 코어 컬럼으로만 2차 시도
+          // 에이징 날짜 컬럼 및 completed_new 컬럼을 제외하고 필수 코어 컬럼으로만 2차 시도
           if (error && (error.code === '42703' || error.message?.includes('column') || error.message?.includes('does not exist'))) {
             console.warn("Schema mismatch detected. Retrying upsert with core columns only...");
-            const minimalMapped = mapped.map(({ review2_date, review3_date, review4_date, ...rest }) => rest);
+            const minimalMapped = mapped.map(({ review2_date, review3_date, review4_date, completed_new, ...rest }) => rest);
             const { error: retryError } = await supabaseClient
               .from('spaced_study_sessions')
               .upsert(minimalMapped);
@@ -343,7 +566,47 @@ export default function App() {
     return r4 === selectedDate;
   });
 
-  const hasAnyReviews = reviews2.length > 0 || reviews3.length > 0 || reviews4.length > 0;
+  interface CombinedReviewItem {
+    session: StudySession;
+    stage: 'review2' | 'review3' | 'review4';
+    numLabel: string;
+    colorClass: string;
+    checkColorClass: string;
+  }
+
+  const combinedReviews: CombinedReviewItem[] = [];
+
+  reviews2.forEach(s => {
+    combinedReviews.push({
+      session: s,
+      stage: 'review2',
+      numLabel: '2',
+      colorClass: 'bg-green-50 text-green-600',
+      checkColorClass: 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200'
+    });
+  });
+
+  reviews3.forEach(s => {
+    combinedReviews.push({
+      session: s,
+      stage: 'review3',
+      numLabel: '3',
+      colorClass: 'bg-amber-50 text-amber-500',
+      checkColorClass: 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200'
+    });
+  });
+
+  reviews4.forEach(s => {
+    combinedReviews.push({
+      session: s,
+      stage: 'review4',
+      numLabel: '4',
+      colorClass: 'bg-rose-50 text-rose-500',
+      checkColorClass: 'bg-rose-500 border-rose-500 text-white shadow-md shadow-rose-200'
+    });
+  });
+
+  const hasAnyReviews = combinedReviews.length > 0;
 
   // === MASCOT & STUDY STATS COMPUTATION ===
   const totalPagesStudied = sessions.reduce((acc, s) => acc + (s.endPage - s.startPage + 1), 0);
@@ -351,7 +614,9 @@ export default function App() {
   let totalOpportunities = 0;
   let completedCount = 0;
   sessions.forEach(s => {
-    totalOpportunities += 3;
+    // 1 new progress + 3 reviews = 4 opportunities per session
+    totalOpportunities += 4;
+    if (s.completedNew) completedCount++;
     if (s.completedReviews.review2) completedCount++;
     if (s.completedReviews.review3) completedCount++;
     if (s.completedReviews.review4) completedCount++;
@@ -359,6 +624,42 @@ export default function App() {
   const reviewCompletionRate = totalOpportunities > 0 
     ? Math.round((completedCount / totalOpportunities) * 100) 
     : 0;
+
+  // Selected date's progress rate calculation (Today's progress rate)
+  const calculateTodayProgressRate = (currentSessions: StudySession[], dateStr: string) => {
+    const todaySess = currentSessions.filter(s => s.date === dateStr);
+    const rev2 = currentSessions.filter(s => (s.review2Date || calculateFutureDateExcludingSundays(s.date, 4)) === dateStr);
+    const rev3 = currentSessions.filter(s => (s.review3Date || calculateFutureDateExcludingSundays(s.date, 7)) === dateStr);
+    const rev4 = currentSessions.filter(s => (s.review4Date || calculateFutureDateExcludingSundays(s.date, 15)) === dateStr);
+
+    const total = todaySess.length + rev2.length + rev3.length + rev4.length;
+    if (total === 0) return 0;
+
+    const completed = 
+      todaySess.filter(s => s.completedNew).length +
+      rev2.filter(s => s.completedReviews.review2).length +
+      rev3.filter(s => s.completedReviews.review3).length +
+      rev4.filter(s => s.completedReviews.review4).length;
+
+    return Math.round((completed / total) * 100);
+  };
+
+  const todayNewSessions = sessions.filter(s => s.date === selectedDate);
+  const todayProgressRate = calculateTodayProgressRate(sessions, selectedDate);
+
+  const trigger100PercentPopup = () => {
+    const randomMsgIndex = Math.floor(Math.random() * FROG_MESSAGES.length);
+    const randomCharacterIndex = Math.floor(Math.random() * FROG_CHARACTERS.length);
+    
+    setCurrentLuckyMessage({
+      text: FROG_MESSAGES[randomMsgIndex],
+      character: FROG_CHARACTERS[randomCharacterIndex],
+      emoji: FROG_EMOJIS[randomCharacterIndex]
+    });
+    setModalType('achievement100');
+    setShowLuckyModal(true);
+    playSuccessSound();
+  };
 
   // Streak days calculation
   const uniqueDatesSorted = Array.from(new Set<string>(sessions.map(s => s.date))).sort(
@@ -430,6 +731,7 @@ export default function App() {
       review2Date: r2,
       review3Date: r3,
       review4Date: r4,
+      completedNew: false,
       completedReviews: {
         review2: false,
         review3: false,
@@ -440,9 +742,15 @@ export default function App() {
     const updated = [newSession, ...sessions];
     saveSessionsAndSync(updated);
 
-    // Set modal info
-    const randomMsg = LUCKY_MESSAGES[Math.floor(Math.random() * LUCKY_MESSAGES.length)];
-    setCurrentLuckyMessage(randomMsg);
+    // Set modal info with random frog and random message
+    const randomMsgIndex = Math.floor(Math.random() * FROG_MESSAGES.length);
+    const randomCharacterIndex = Math.floor(Math.random() * FROG_CHARACTERS.length);
+    setCurrentLuckyMessage({
+      text: FROG_MESSAGES[randomMsgIndex],
+      character: FROG_CHARACTERS[randomCharacterIndex],
+      emoji: FROG_EMOJIS[randomCharacterIndex]
+    });
+    setModalType('register');
     setLastSavedSession(newSession);
     setShowLuckyModal(true);
 
@@ -464,6 +772,7 @@ export default function App() {
   };
 
   const handleToggleReviewComplete = (sessionId: string, stage: 'review2' | 'review3' | 'review4') => {
+    const prevRate = calculateTodayProgressRate(sessions, selectedDate);
     const updated = sessions.map(s => {
       if (s.id === sessionId) {
         return {
@@ -476,7 +785,31 @@ export default function App() {
       }
       return s;
     });
+    const newRate = calculateTodayProgressRate(updated, selectedDate);
     saveSessionsAndSync(updated);
+
+    if (newRate === 100 && prevRate < 100) {
+      trigger100PercentPopup();
+    }
+  };
+
+  const handleToggleNewComplete = (sessionId: string) => {
+    const prevRate = calculateTodayProgressRate(sessions, selectedDate);
+    const updated = sessions.map(s => {
+      if (s.id === sessionId) {
+        return {
+          ...s,
+          completedNew: !s.completedNew
+        };
+      }
+      return s;
+    });
+    const newRate = calculateTodayProgressRate(updated, selectedDate);
+    saveSessionsAndSync(updated);
+
+    if (newRate === 100 && prevRate < 100) {
+      trigger100PercentPopup();
+    }
   };
 
   // === CALENDAR BUILDING ===
@@ -536,7 +869,7 @@ export default function App() {
             <span className="text-xs font-bold uppercase tracking-[0.2em] text-slate-400">Study Automation System</span>
           </div>
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-slate-900 tracking-tight">
-            복습 자동화 <span className="text-green-600">개굴개굴 🐸</span>
+            복습 자동화 <span className="text-green-600">깨굴깨굴 🐸</span>
           </h1>
         </div>
       </header>
@@ -864,35 +1197,74 @@ export default function App() {
           <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/40 border border-slate-100 p-6 lg:p-8 flex flex-col">
             
             {/* Mission Section Header */}
-            <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
-              <div>
-                <h3 className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest">오늘의 복습 미션</h3>
-                <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">{formatDateWithDay(selectedDate)}</p>
+            <div className="flex flex-col space-y-3.5 mb-5 pb-3 border-b border-slate-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xs sm:text-sm font-black text-slate-400 uppercase tracking-widest">오늘의 학습 & 복습 미션</h3>
+                  <p className="text-xs sm:text-sm font-bold text-slate-500 mt-1">{formatDateWithDay(selectedDate)}</p>
+                </div>
               </div>
-              <span className="text-[11px] sm:text-xs font-black text-green-700 bg-green-50/80 px-3 py-1.5 rounded-full uppercase tracking-wider border border-green-100/60">
-                {remainingReviewsCount}개 남음
-              </span>
+ 
+              {/* Today's Progress Bar */}
+              <div className="bg-slate-50 rounded-2xl p-3.5 border border-slate-100 flex flex-col space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="font-extrabold text-slate-600 flex items-center gap-1.5">
+                    <span>🐸</span> 오늘의 총 진도율
+                  </span>
+                  <span className="font-black text-green-600">{todayProgressRate}% 완료</span>
+                </div>
+                <div className="w-full bg-slate-200/60 h-2.5 rounded-full overflow-hidden">
+                  <motion.div 
+                    className="bg-green-500 h-full rounded-full"
+                    initial={{ width: 0 }}
+                    animate={{ width: `${todayProgressRate}%` }}
+                    transition={{ duration: 0.4, ease: "easeOut" }}
+                  />
+                </div>
+              </div>
             </div>
-
-            <div className="space-y-5">
+ 
+            <div className="space-y-6">
               
-              {/* === 1. 최초 학습 범위 (선택된 날짜 기준) === */}
-              <div className="bg-slate-50/50 rounded-2xl p-4.5 border border-slate-100">
-                <div className="flex items-center gap-1.5 mb-2.5">
-                  <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="text-[10px] sm:text-xs font-black text-green-600 uppercase tracking-wider">당일 최초 신규 진도</span>
+              {/* === 1. 신규 학습 === */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-block w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    <span className="text-[10px] sm:text-xs font-black text-green-600 uppercase tracking-wider">신규 학습</span>
+                  </div>
                 </div>
                 
                 {sessions.filter(s => s.date === selectedDate).length > 0 ? (
                   <div className="space-y-2.5">
                     {sessions.filter(s => s.date === selectedDate).map(s => (
-                      <div key={s.id} className="bg-white rounded-xl p-3 lg:p-3.5 border border-slate-100 flex items-start justify-between gap-3 shadow-sm">
-                        <div>
-                          <p className="text-sm sm:text-base font-black text-slate-800">{s.subject}</p>
-                          <p className="text-xs sm:text-sm font-mono font-bold text-slate-500 mt-1">
-                            범위: <span className="text-green-600 font-extrabold">{s.startPage}p ~ {s.endPage}p</span>
-                          </p>
+                      <div 
+                        key={s.id} 
+                        className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
+                      >
+                        <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mr-3.5 font-display font-black text-base shrink-0">
+                          1
                         </div>
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
+                          <p className="text-sm sm:text-base font-black text-slate-700 font-mono mt-0.5">{s.startPage} ~ {s.endPage}p</p>
+                        </div>
+ 
+                        {/* Complete toggle checkbox */}
+                        <button
+                          onClick={() => handleToggleNewComplete(s.id)}
+                          className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
+                            s.completedNew
+                              ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200'
+                              : 'border-slate-200 text-slate-300 hover:border-green-500 hover:bg-green-50/30'
+                          }`}
+                        >
+                          {s.completedNew ? (
+                            <Check className="w-5 h-5 stroke-[3px]" />
+                          ) : (
+                            <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          )}
+                        </button>
                       </div>
                     ))}
                   </div>
@@ -903,187 +1275,179 @@ export default function App() {
                   </div>
                 )}
               </div>
-
-              {/* === 2. SECOND REVIEW (2차 복습: D+4, 일요일 제외) === */}
-              {reviews2.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] sm:text-xs font-black text-green-600 uppercase tracking-wider">2차 복습 (4일 전 진도)</span>
-                    <span className="text-[9px] font-black bg-green-50 text-green-600 px-2 py-0.5 rounded-lg border border-green-100/40">D-4 Target</span>
-                  </div>
-
-                  {reviews2.map(s => (
-                    <div 
-                      key={s.id} 
-                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-green-50 flex items-center justify-center text-green-600 mr-3.5 font-display font-black text-base shrink-0">
-                        2
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
-                          <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
+ 
+              {/* === 2. 복습 진도 === */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] sm:text-xs font-black text-slate-600 uppercase tracking-wider">복습 진도</span>
+                </div>
+ 
+                {hasAnyReviews ? (
+                  <div className="space-y-2.5">
+                    {combinedReviews.map(({ session: s, stage, numLabel, colorClass, checkColorClass }) => {
+                      const isCompleted = s.completedReviews[stage];
+                      return (
+                        <div 
+                          key={`${s.id}-${stage}`} 
+                          className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
+                        >
+                          <div className={`w-11 h-11 rounded-xl flex items-center justify-center mr-3.5 font-display font-black text-base shrink-0 ${colorClass}`}>
+                            {numLabel}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
+                              <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
+                              <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
+                            </div>
+                            <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
+                          </div>
+ 
+                          <button
+                            onClick={() => handleToggleReviewComplete(s.id, stage)}
+                            className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
+                              isCompleted
+                                ? checkColorClass
+                                : 'border-slate-200 text-slate-300 hover:border-green-500 hover:bg-green-50/30'
+                            }`}
+                          >
+                            {isCompleted ? (
+                              <Check className="w-5 h-5 stroke-[3px]" />
+                            ) : (
+                              <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </button>
                         </div>
-                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
-                      </div>
-
-                      {/* Complete toggle checkbox */}
-                      <button
-                        onClick={() => handleToggleReviewComplete(s.id, 'review2')}
-                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
-                          s.completedReviews.review2
-                            ? 'bg-green-500 border-green-500 text-white shadow-md shadow-green-200'
-                            : 'border-slate-200 text-slate-300 hover:border-green-500 hover:bg-green-50/30'
-                        }`}
-                      >
-                        {s.completedReviews.review2 ? (
-                          <Check className="w-5 h-5 stroke-[3px]" />
-                        ) : (
-                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* === 3. THIRD REVIEW (3차 복습: D+7, 일요일 제외) === */}
-              {reviews3.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] sm:text-xs font-black text-amber-600 uppercase tracking-wider">3차 복습 (7일 전 진도)</span>
-                    <span className="text-[9px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-lg border border-amber-100/40">D-7 Target</span>
+                      );
+                    })}
                   </div>
-
-                  {reviews3.map(s => (
-                    <div 
-                      key={s.id} 
-                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-amber-50 flex items-center justify-center text-amber-500 mr-3.5 font-display font-black text-base shrink-0">
-                        3
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
-                          <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
-                        </div>
-                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
-                      </div>
-
-                      <button
-                        onClick={() => handleToggleReviewComplete(s.id, 'review3')}
-                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
-                          s.completedReviews.review3
-                            ? 'bg-amber-500 border-amber-500 text-white shadow-md shadow-amber-200'
-                            : 'border-slate-200 text-slate-300 hover:border-amber-500 hover:bg-amber-50/30'
-                        }`}
-                      >
-                        {s.completedReviews.review3 ? (
-                          <Check className="w-5 h-5 stroke-[3px]" />
-                        ) : (
-                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* === 4. FOURTH REVIEW (4차 복습: D+15, 일요일 제외) === */}
-              {reviews4.length > 0 ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <span className="text-[10px] sm:text-xs font-black text-rose-600 uppercase tracking-wider">4차 복습 (15일 전 진도)</span>
-                    <span className="text-[9px] font-black bg-rose-50 text-rose-600 px-2 py-0.5 rounded-lg border border-rose-100/40">D-15 Target</span>
+                ) : (
+                  <div className="border-2 border-dashed border-slate-200/60 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-2.5 bg-slate-50/50">
+                    <span className="text-3xl">🐸</span>
+                    <p className="text-xs font-extrabold text-slate-700">남아있는 복습 미션이 없습니다.</p>
+                    <p className="text-[10px] text-slate-400 max-w-[200px] leading-relaxed">
+                      선택일 기준 복습 주기에 해당하는 진도가 없습니다. 완벽한 타이밍에 복습 카드가 이곳에 정착합니다.
+                    </p>
                   </div>
-
-                  {reviews4.map(s => (
-                    <div 
-                      key={s.id} 
-                      className="group bg-white p-4 lg:p-4.5 rounded-2xl shadow-sm border border-slate-100/80 flex items-center hover:shadow-md transition-all relative"
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-rose-50 flex items-center justify-center text-rose-500 mr-3.5 font-display font-black text-base shrink-0">
-                        4
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm font-extrabold text-slate-800 truncate block">{s.subject}</span>
-                          <span className="w-1 h-1 bg-slate-200 rounded-full"></span>
-                          <span className="text-xs font-bold text-slate-400 shrink-0">{s.date.substring(5)}</span>
-                        </div>
-                        <p className="text-sm sm:text-base font-black text-slate-700 font-mono">{s.startPage} ~ {s.endPage}p</p>
-                      </div>
-
-                      <button
-                        onClick={() => handleToggleReviewComplete(s.id, 'review4')}
-                        className={`w-10 h-10 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer shrink-0 active:scale-90 ${
-                          s.completedReviews.review4
-                            ? 'bg-rose-500 border-rose-500 text-white shadow-md shadow-rose-200'
-                            : 'border-slate-200 text-slate-300 hover:border-rose-500 hover:bg-rose-50/30'
-                        }`}
-                      >
-                        {s.completedReviews.review4 ? (
-                          <Check className="w-5 h-5 stroke-[3px]" />
-                        ) : (
-                          <Check className="w-5 h-5 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-
-              {/* Empty state for reviews */}
-              {!hasAnyReviews && (
-                <div className="border-2 border-dashed border-slate-200/60 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-2.5 bg-slate-50/50">
-                  <span className="text-3xl">🐸</span>
-                  <p className="text-xs font-extrabold text-slate-700">남아있는 복습 미션이 없습니다.</p>
-                  <p className="text-[10px] text-slate-400 max-w-[200px] leading-relaxed">
-                    선택일 기준 복습 주기에 해당하는 진도가 없습니다. 완벽한 타이밍에 복습 카드가 이곳에 정착합니다.
-                  </p>
-                </div>
-              )}
-
+                )}
+              </div>
+ 
             </div>
           </div>
-
+ 
           {/* BEAUTIFUL FROG MASCOT STATS & MOOD BOARD (Cleverly fills the column to balance heights perfectly) */}
           <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-3xl p-6 lg:p-8 text-white shadow-xl shadow-green-200/50 relative overflow-hidden flex flex-col justify-between min-h-[340px]">
             {/* Background elements */}
             <div className="absolute -right-12 -bottom-12 w-44 h-44 bg-green-400/20 rounded-full blur-xl pointer-events-none" />
             <div className="absolute right-4 top-4 text-8xl opacity-15 select-none pointer-events-none">🐸</div>
-
+ 
             <div>
-              <div className="flex items-center gap-2 mb-4.5">
-                <span className="p-2 bg-white/20 rounded-lg backdrop-blur-md">
-                  <Sparkles className="w-4 h-4 text-yellow-300" />
-                </span>
-                <span className="text-[10px] sm:text-xs font-black uppercase tracking-widest text-green-100">Study Stats & Mascot</span>
-              </div>
+              {/* Dynamic Animated Frog Pond with expanded height */}
+              <div ref={pondRef} className="bg-emerald-950/40 backdrop-blur-md rounded-2xl p-4 border border-white/10 relative mb-6 overflow-hidden h-60 flex items-center justify-center">
+                {/* Water ripple circles */}
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <motion.div 
+                    className="absolute w-24 h-12 rounded-full border border-teal-300/20"
+                    animate={{ scale: [1, 2.5], opacity: [0.6, 0] }}
+                    transition={{ repeat: Infinity, duration: 4, ease: "linear" }}
+                  />
+                  <motion.div 
+                    className="absolute w-24 h-12 rounded-full border border-teal-300/20"
+                    animate={{ scale: [1, 2.5], opacity: [0.6, 0] }}
+                    transition={{ repeat: Infinity, duration: 4, delay: 2, ease: "linear" }}
+                  />
+                </div>
 
-              {/* Frog cheer dialog block */}
-              <div className="bg-white/10 backdrop-blur-md rounded-2xl p-4 lg:p-5 border border-white/10 relative mb-6">
-                <div className="absolute left-6 -top-2 w-3 h-3 bg-white/10 rotate-45 border-l border-t border-white/10" />
-                <p className="text-xs sm:text-sm font-bold leading-relaxed">
-                  {remainingReviewsCount === 0 && sessions.length > 0
-                    ? "“오늘 계획된 모든 복습 미션 올클리어! 정말 대단해요 개굴! 내일의 성장도 벌써 기대되는걸요?🐸💚”"
-                    : sessions.length === 0
-                    ? "“새로운 공부를 시작해볼까요? 왼쪽에서 오늘의 진도를 등록하시면 개굴이가 완벽한 복습 주기를 설계해 드려요!🐸✨”"
-                    : "“복습은 장기 기억의 지름길 개굴! 오늘 남아있는 복습 미션을 차근차근 해결하며 뇌에 근육을 키워봐요!🐸💪”"
-                  }
-                </p>
-                <span className="text-[10px] sm:text-xs font-black text-green-200 block mt-2.5 text-right">
-                  — 청개구리 멘토 개구리
-                </span>
+                {/* Left Lilypad & Frog */}
+                <motion.div 
+                  drag
+                  dragConstraints={pondRef}
+                  dragElastic={0.05}
+                  whileDrag={{ scale: 1.1, zIndex: 50, cursor: 'grabbing' }}
+                  className="absolute left-6 bottom-4 flex flex-col items-center cursor-grab active:cursor-grabbing select-none z-10 touch-none"
+                >
+                  {/* Lilypad leaf */}
+                  <svg className="w-14 h-6 text-emerald-600/90 fill-current drop-shadow pointer-events-none" viewBox="0 0 100 40">
+                    <ellipse cx="50" cy="20" rx="45" ry="15" />
+                    <path d="M50 20 L95 20" stroke="#047857" strokeWidth="2" />
+                  </svg>
+                  {/* Frog sitting on lilypad */}
+                  <motion.div 
+                    className="absolute -top-7 flex flex-col items-center cursor-pointer"
+                    animate={{ y: [0, -3, 0] }}
+                    transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
+                    onClick={() => handleFrogClick('left')}
+                  >
+                    <span className="text-2xl select-none" title="개굴A">🐸</span>
+                    <span className="text-[9px] bg-emerald-800/80 px-1 py-0.5 rounded text-white/95 font-bold scale-75 -mt-1.5 backdrop-blur-sm">
+                      {leftFrogName}
+                    </span>
+                  </motion.div>
+                </motion.div>
+
+                {/* Right Floating Frog */}
+                <motion.div 
+                  drag
+                  dragConstraints={pondRef}
+                  dragElastic={0.05}
+                  whileDrag={{ scale: 1.1, zIndex: 50, cursor: 'grabbing' }}
+                  className="absolute right-6 top-6 flex flex-col items-center cursor-grab active:cursor-grabbing select-none z-10 touch-none"
+                >
+                  <motion.div 
+                    className="flex flex-col items-center cursor-pointer"
+                    animate={{ x: [0, 4, 0], y: [0, 2, 0] }}
+                    transition={{ repeat: Infinity, duration: 3.2, ease: "easeInOut" }}
+                    onClick={() => handleFrogClick('right')}
+                  >
+                    {/* Ring tube around frog */}
+                    <div className="relative">
+                      <span className="text-2xl select-none z-10 relative">🐸</span>
+                      <div className="absolute -bottom-1 left-1 w-5 h-2 bg-yellow-400 rounded-full border border-yellow-500 opacity-90 blur-[0.5px] pointer-events-none"></div>
+                    </div>
+                    <span className="text-[9px] bg-sky-800/80 px-1 py-0.5 rounded text-white/95 font-bold scale-75 -mt-0.5 backdrop-blur-sm font-display">
+                      {rightFrogName}
+                    </span>
+                  </motion.div>
+                </motion.div>
+
+                {/* Center Big Lilypad & Crown Frog */}
+                <motion.div 
+                  drag
+                  dragConstraints={pondRef}
+                  dragElastic={0.05}
+                  whileDrag={{ scale: 1.1, zIndex: 50, cursor: 'grabbing' }}
+                  className="absolute inset-x-0 bottom-2 mx-auto w-24 flex flex-col items-center justify-center cursor-grab active:cursor-grabbing select-none z-10 touch-none"
+                >
+                  {/* Big Lilypad leaf */}
+                  <svg className="w-20 h-8 text-emerald-500 fill-current drop-shadow-md pointer-events-none" viewBox="0 0 100 40">
+                    <ellipse cx="50" cy="20" rx="48" ry="18" />
+                    <path d="M50 20 L10 20" stroke="#059669" strokeWidth="2" />
+                  </svg>
+                  {/* Golden Crown wearing Frog */}
+                  <motion.div 
+                    className="absolute -top-10 flex flex-col items-center cursor-pointer"
+                    animate={{ scale: [1, 1.04, 1] }}
+                    transition={{ repeat: Infinity, duration: 1.8, ease: "easeInOut" }}
+                    onClick={() => handleFrogClick('center')}
+                  >
+                    <div className="relative flex flex-col items-center">
+                      <span className="text-[10px] text-yellow-300 absolute -top-2.5 drop-shadow animate-bounce pointer-events-none">👑</span>
+                      <span className="text-3xl select-none">🐸</span>
+                    </div>
+                    <span className="text-[9px] bg-green-900/90 px-1.5 py-0.5 rounded-full text-white/95 font-black tracking-wider -mt-1 shadow border border-green-700/50">
+                      {centerFrogName}
+                    </span>
+                  </motion.div>
+                </motion.div>
+
+                {/* Water weed decorative SVGs */}
+                <div className="absolute left-2 top-2 opacity-35">🌿</div>
+                <div className="absolute right-2 bottom-3 opacity-30 text-xs">🌱</div>
               </div>
             </div>
 
             {/* Quick dashboard stats */}
-            <div className="grid grid-cols-3 gap-3.5 mb-5">
+            <div className="grid grid-cols-3 gap-3.5">
               <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
                 <Flame className="w-4 h-4 text-orange-400 mx-auto mb-1.5" />
                 <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">학습 연속</span>
@@ -1096,111 +1460,8 @@ export default function App() {
               </div>
               <div className="bg-white/10 backdrop-blur-md border border-white/5 p-3 lg:p-4 rounded-2xl text-center">
                 <TrendingUp className="w-4 h-4 text-yellow-300 mx-auto mb-1.5" />
-                <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">복습 완료율</span>
+                <span className="text-[9px] sm:text-[10px] font-bold text-green-200 block">학습 완료율</span>
                 <span className="text-sm sm:text-base font-extrabold block">{reviewCompletionRate}%</span>
-              </div>
-            </div>
-
-            {/* Supabase Connectivity & Diagnostics Widget */}
-            <div className="bg-white/10 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-left text-xs space-y-3">
-              <div className="flex items-center justify-between border-b border-white/10 pb-2">
-                <span className="font-extrabold tracking-wider text-green-100 flex items-center gap-1.5">
-                  <span className="inline-block w-2 h-2 rounded-full bg-white animate-ping"></span>
-                  Supabase 연동 상태 진단
-                </span>
-                <button
-                  type="button"
-                  disabled={isSyncing}
-                  onClick={() => {
-                    if (supabaseClient) {
-                      fetchFromSupabase();
-                    } else {
-                      window.location.reload();
-                    }
-                  }}
-                  className="p-1 hover:bg-white/10 rounded-lg transition-all active:scale-95 disabled:opacity-50 text-white cursor-pointer"
-                  title="연동 데이터 수동 새로고침"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                </button>
-              </div>
-
-              {/* Status details */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-green-200">연동 클라이언트:</span>
-                  <span className={`font-extrabold px-1.5 py-0.5 rounded text-[10px] ${supabaseClient ? 'bg-green-400/20 text-green-100' : 'bg-red-500/20 text-red-100'}`}>
-                    {supabaseClient ? '활성화 (OK)' : '비활성화 (Missing)'}
-                  </span>
-                </div>
-
-                <div className="flex justify-between items-center text-[11px]">
-                  <span className="text-green-200">환경변수 등록 상태:</span>
-                  <span className="font-mono text-[10px]">
-                    URL: {SB_URL ? '✅ 등록됨' : '❌ 미설정'} | Key: {SB_KEY ? '✅ 등록됨' : '❌ 미설정'}
-                  </span>
-                </div>
-
-                {supabaseClient ? (
-                  <div className="mt-2 pt-2 border-t border-white/5 space-y-1">
-                    <span className="text-green-200 text-[10px] block">마지막 연동 상태:</span>
-                    {supabaseError ? (
-                      <div className="bg-amber-500/20 border border-amber-500/30 text-amber-100 p-2 rounded-lg text-[10.5px] leading-relaxed space-y-1">
-                        <p className="font-extrabold">⚠️ 연동 오류 감지</p>
-                        {supabaseError === 'missing_table' && (
-                          <p>Supabase에 <code className="bg-white/10 px-1 rounded text-white font-mono">spaced_study_sessions</code> 테이블이 없거나 권한이 없습니다. SQL 스크립트를 올바르게 실행했는지 확인해주세요.</p>
-                        )}
-                        {supabaseError === 'credentials' && (
-                          <p>API Key/URL 자격증명이 잘못되었습니다. 복사 붙여넣기 시 공백이 포함되었는지 확인하세요.</p>
-                        )}
-                        {supabaseError === 'general' && (
-                          <p>일반 에러: {supabaseRawError || '연결 실패'}</p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="bg-green-400/20 border border-green-400/30 text-green-100 p-2 rounded-lg text-[10.5px] flex items-center gap-2">
-                        <span className="text-sm">🐸</span>
-                        <div>
-                          <p className="font-extrabold">실시간 클라우드 동기화 중</p>
-                          <p className="text-[9.5px] text-green-200 mt-0.5">최초 진도 등록 및 체크 상태가 Supabase에 즉시 백업되고 있습니다.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ) : (
-                  <div className="bg-red-500/10 border border-red-500/20 text-red-100 p-2.5 rounded-lg text-[10.5px] leading-relaxed space-y-2">
-                    <p className="font-extrabold text-amber-200">💡 환경변수 미설정 해결 방법:</p>
-                    
-                    <div className="space-y-1">
-                      <p className="font-bold text-[10.5px] text-white">1. AI Studio 미리보기용:</p>
-                      <ul className="list-disc list-inside ml-1 text-[10px] text-red-200 space-y-0.5">
-                        <li>우측 상단 <b>Settings</b> 메뉴 클릭</li>
-                        <li><b>Environment Variables</b>에 등록:</li>
-                        <div className="ml-3 font-mono text-[9px] text-white space-y-0.5">
-                          <div>- <code className="bg-white/15 px-1 rounded text-green-300">SUPABASE_URL</code></div>
-                          <div>- <code className="bg-white/15 px-1 rounded text-green-300">SUPABASE_ANON_KEY</code></div>
-                        </div>
-                        <li>등록 후 <b>빌드 서버 리스타트</b> & 새로고침</li>
-                      </ul>
-                    </div>
-
-                    <div className="space-y-1 pt-1.5 border-t border-white/5">
-                      <p className="font-bold text-[10.5px] text-white">2. Vercel 배포용 (중요):</p>
-                      <p className="text-[10px] text-red-200 leading-normal">
-                        Vite 앱은 브라우저 노출을 위해 반드시 접두사 <code className="bg-white/10 px-0.5 rounded text-white font-mono">VITE_</code>가 붙은 환경변수가 필요합니다.
-                      </p>
-                      <ul className="list-disc list-inside ml-1 text-[10px] text-red-200 space-y-0.5">
-                        <li>Vercel 대시보드 &gt; <b>Settings</b> &gt; <b>Environment Variables</b> 진입</li>
-                        <li>아래 두 변수를 똑같이 추가:</li>
-                        <div className="ml-3 font-mono text-[9px] text-white space-y-0.5">
-                          <div>- <code className="bg-white/15 px-1 rounded text-yellow-300">VITE_SUPABASE_URL</code></div>
-                          <div>- <code className="bg-white/15 px-1 rounded text-yellow-300">VITE_SUPABASE_ANON_KEY</code></div>
-                        </div>
-                        <li>추가 후 <b>Deployments</b> 탭에서 <b>Redeploy(재배포)</b> 진행</li>
-                      </ul>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -1343,7 +1604,7 @@ export default function App() {
 
       {/* === MODAL: STUDY COMPLETE & REVIEWS & LUCKY MESSAGE === */}
       <AnimatePresence>
-        {showLuckyModal && lastSavedSession && (
+        {showLuckyModal && (modalType === 'achievement100' || lastSavedSession) && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             {/* Backdrop */}
             <motion.div
@@ -1360,7 +1621,7 @@ export default function App() {
                 const randomX = Math.random() * 100;
                 const randomY = Math.random() * 100;
                 const randomScale = Math.random() * 1.1 + 0.5;
-                const randomDelay = Math.random() * 1.5;
+                const randomDelay = Math.random() * i * 0.15;
                 return (
                   <motion.div
                     key={i}
@@ -1394,88 +1655,113 @@ export default function App() {
               className="bg-white rounded-3xl shadow-2xl border border-slate-100 max-w-md w-full overflow-hidden relative z-50"
             >
               {/* Top Banner Accent */}
-              <div className="bg-gradient-to-r from-green-600 to-green-700 p-6 text-center text-white relative">
-                <span className="inline-block px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-bold rounded-full mb-2 uppercase tracking-widest">
-                  Success Added
-                </span>
-                <h3 className="font-display text-lg sm:text-xl font-extrabold tracking-tight">공부 진도가 성공적으로 등록되었습니다! 🐸</h3>
-              </div>
+              {modalType === 'achievement100' ? (
+                <div className="bg-gradient-to-r from-yellow-500 via-green-500 to-emerald-600 p-6 text-center text-white relative">
+                  <span className="inline-block px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-bold rounded-full mb-2 uppercase tracking-widest animate-pulse">
+                    Mission Accomplished 100%
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold tracking-tight">축하합니다! 미션 100% 달성! 🐸🎉</h3>
+                </div>
+              ) : (
+                <div className="bg-gradient-to-r from-green-600 to-green-700 p-6 text-center text-white relative">
+                  <span className="inline-block px-2.5 py-0.5 bg-white/20 text-white text-[9px] font-bold rounded-full mb-2 uppercase tracking-widest">
+                    Success Added
+                  </span>
+                  <h3 className="font-display text-lg sm:text-xl font-extrabold tracking-tight">공부 진도가 등록되었습니다! 🐸🍀</h3>
+                </div>
+              )}
 
               {/* Content Body */}
               <div className="p-6 space-y-5">
                 
-                {/* 1. STUDY SUMMARY */}
-                <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 flex items-center justify-between gap-3 text-xs">
-                  <div>
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">등록된 과목</span>
-                    <span className="font-extrabold text-slate-800 text-sm block">
-                      {lastSavedSession.subject}
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">범위</span>
-                    <span className="text-xs font-mono bg-green-50 border border-green-100 text-green-700 font-extrabold px-2 py-0.5 rounded-lg">
-                      {lastSavedSession.startPage} ~ {lastSavedSession.endPage}p
-                    </span>
-                  </div>
-                </div>
-
-                {/* 2. REPEATED SCHEDULES */}
-                <div>
-                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5">🔔 스케줄 복습 플래너 (일요일 제외 완료)</span>
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    
-                    {/* 2차 */}
-                    <div className="bg-green-50/50 border border-green-100/50 rounded-xl p-2.5 text-center">
-                      <span className="text-[9px] font-extrabold text-green-600 block mb-0.5">2차 (D+4)</span>
-                      <span className="text-xs font-extrabold text-slate-800 block">
-                        {calculateFutureDateExcludingSundays(lastSavedSession.date, 4).substring(5).replace('-', '/')}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-medium">
-                        ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 4))})
-                      </span>
+                {modalType === 'register' && lastSavedSession && (
+                  <>
+                    {/* 1. STUDY SUMMARY */}
+                    <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 flex items-center justify-between gap-3 text-xs">
+                      <div>
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">등록된 과목</span>
+                        <span className="font-extrabold text-slate-800 text-sm block">
+                          {lastSavedSession.subject}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">범위</span>
+                        <span className="text-xs font-mono bg-green-50 border border-green-100 text-green-700 font-extrabold px-2 py-0.5 rounded-lg">
+                          {lastSavedSession.startPage} ~ {lastSavedSession.endPage}p
+                        </span>
+                      </div>
                     </div>
 
-                    {/* 3차 */}
-                    <div className="bg-amber-50/50 border border-amber-100/50 rounded-xl p-2.5 text-center">
-                      <span className="text-[9px] font-extrabold text-amber-600 block mb-0.5">3차 (D+7)</span>
-                      <span className="text-xs font-extrabold text-slate-800 block">
-                        {calculateFutureDateExcludingSundays(lastSavedSession.date, 7).substring(5).replace('-', '/')}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-medium">
-                        ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 7))})
-                      </span>
+                    {/* 2. REPEATED SCHEDULES */}
+                    <div>
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-2.5">🔔 스케줄 복습 플래너 (일요일 제외 완료)</span>
+                      <div className="grid grid-cols-3 gap-2 text-[11px]">
+                        
+                        {/* 2차 */}
+                        <div className="bg-green-50/50 border border-green-100/50 rounded-xl p-2.5 text-center">
+                          <span className="text-[9px] font-extrabold text-green-600 block mb-0.5">2차 (D+4)</span>
+                          <span className="text-xs font-extrabold text-slate-800 block">
+                            {calculateFutureDateExcludingSundays(lastSavedSession.date, 4).substring(5).replace('-', '/')}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">
+                            ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 4))})
+                          </span>
+                        </div>
+
+                        {/* 3차 */}
+                        <div className="bg-amber-50/50 border border-amber-100/50 rounded-xl p-2.5 text-center">
+                          <span className="text-[9px] font-extrabold text-amber-600 block mb-0.5">3차 (D+7)</span>
+                          <span className="text-xs font-extrabold text-slate-800 block">
+                            {calculateFutureDateExcludingSundays(lastSavedSession.date, 7).substring(5).replace('-', '/')}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">
+                            ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 7))})
+                          </span>
+                        </div>
+
+                        {/* 4차 */}
+                        <div className="bg-rose-50/50 border border-rose-100/50 rounded-xl p-2.5 text-center">
+                          <span className="text-[9px] font-extrabold text-rose-600 block mb-0.5">4차 (D+15)</span>
+                          <span className="text-xs font-extrabold text-slate-800 block">
+                            {calculateFutureDateExcludingSundays(lastSavedSession.date, 15).substring(5).replace('-', '/')}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">
+                            ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 15))})
+                          </span>
+                        </div>
+
+                      </div>
                     </div>
+                  </>
+                )}
 
-                    {/* 4차 */}
-                    <div className="bg-rose-50/50 border border-rose-100/50 rounded-xl p-2.5 text-center">
-                      <span className="text-[9px] font-extrabold text-rose-600 block mb-0.5">4차 (D+15)</span>
-                      <span className="text-xs font-extrabold text-slate-800 block">
-                        {calculateFutureDateExcludingSundays(lastSavedSession.date, 15).substring(5).replace('-', '/')}
-                      </span>
-                      <span className="text-[9px] text-slate-400 font-medium">
-                        ({getKoreanDayOfWeek(calculateFutureDateExcludingSundays(lastSavedSession.date, 15))})
-                      </span>
-                    </div>
-
-                  </div>
-                </div>
-
-                {/* 3. LUCKY FORTUNE MESSAGE */}
-                <div className="bg-gradient-to-br from-green-50 to-green-100/40 border border-green-100 rounded-xl p-4 relative overflow-hidden text-xs">
-                  <div className="absolute right-3 bottom-0.5 text-4xl opacity-15 select-none animate-bounce">
-                    🐸
-                  </div>
+                {/* 3. RANDOM FROG CHARACTER & LUCKY ENCOURAGEMENT MESSAGE */}
+                <div className="bg-gradient-to-br from-green-50 to-emerald-100/40 border border-green-100/80 rounded-2xl p-5 relative overflow-hidden text-center flex flex-col items-center justify-center space-y-3.5 shadow-sm">
+                  {/* Big Animated Frog Character Icon Display */}
+                  <motion.div 
+                    className="text-6xl select-none"
+                    animate={{ 
+                      scale: [1, 1.15, 1], 
+                      rotate: [0, -4, 4, 0],
+                      y: [0, -8, 0] 
+                    }}
+                    transition={{ 
+                      repeat: Infinity, 
+                      duration: 2.5, 
+                      ease: "easeInOut" 
+                    }}
+                  >
+                    {currentLuckyMessage.emoji || '🐸'}
+                  </motion.div>
                   
-                  <div className="flex items-center gap-1.5 mb-1.5">
-                    <Smile className="w-3.5 h-3.5 text-green-600" />
-                    <h4 className="font-display text-[9px] font-extrabold text-green-800 uppercase tracking-wider">
+                  <div>
+                    <span className="text-[10px] sm:text-xs font-black bg-green-500 text-white px-2.5 py-1 rounded-full border border-green-600/10 shadow-sm uppercase tracking-wider inline-block">
                       {currentLuckyMessage.character}
-                    </h4>
+                    </span>
+                    <p className="text-xs sm:text-sm font-black text-slate-800 mt-3 leading-relaxed max-w-xs">
+                      "{currentLuckyMessage.text}"
+                    </p>
                   </div>
-                  <p className="text-[11px] text-slate-700 font-medium leading-relaxed">
-                    "{currentLuckyMessage.text}"
-                  </p>
                 </div>
 
               </div>
@@ -1484,7 +1770,7 @@ export default function App() {
               <div className="bg-slate-50 px-5 py-4 flex items-center justify-end border-t border-slate-100">
                 <button
                   onClick={() => setShowLuckyModal(false)}
-                  className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-xl transition cursor-pointer"
+                  className="px-6 py-2.5 bg-green-500 hover:bg-green-600 text-white text-xs font-bold rounded-xl transition cursor-pointer active:scale-95 shadow-md shadow-green-100"
                 >
                   확인 완료! 🍀
                 </button>
